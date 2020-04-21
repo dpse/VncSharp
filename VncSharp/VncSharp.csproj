@@ -52,6 +52,10 @@
   <ItemGroup>
     <Compile Include="KeyboardHook.cs" />
     <Compile Include="NativeMethods.cs" />
+    <Compile Include="Overby.Extensions.AsyncBinaryReaderWriter\AsyncBinaryReader.cs" />
+    <Compile Include="Overby.Extensions.AsyncBinaryReaderWriter\AsyncBinaryWriter.cs" />
+    <Compile Include="Overby.Extensions.AsyncBinaryReaderWriter\StreamExtensions.cs" />
+    <Compile Include="Overby.Extensions.AsyncBinaryReaderWriter\StringBuilderCache.cs" />
     <Compile Include="VncDesignModeDesktopPolicy.cs" />
     <Compile Include="VncDesktopTransformPolicy.cs" />
     <Compile Include="VncScaledDesktopPolicy.cs" />
@@ -100,6 +104,7 @@
     <Compile Include="zlib.NET\ZOutputStream.cs" />
     <Compile Include="zlib.NET\ZStream.cs" />
     <Compile Include="zlib.NET\ZStreamException.cs" />
+    <Compile Include="Overby.Extensions.AsyncBinaryReaderWriter\__Error.cs" />
     <Service Include="{94E38DFF-614B-4cbd-B67C-F211BB35CE8B}" />
   </ItemGroup>
   <ItemGroup>
