@@ -20,7 +20,9 @@ using System.Drawing.Imaging;
 
 namespace VncSharp.Encodings
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// Implementation of CopyRect encoding, as well as drawing support. See RFB Protocol document v. 3.8 section 6.5.2.
 	/// </summary>
 	public sealed class CopyRectRectangle : EncodedRectangle 
@@ -36,12 +38,12 @@ namespace VncSharp.Encodings
 		/// <summary>
 		/// Decodes a CopyRect encoded rectangle.
 		/// </summary>
-		public override void Decode()
+		public override async Task Decode()
 		{
 			// Read the source point from which to begin copying pixels
 			source = new Point();
-			source.X = rfb.ReadUInt16();
-			source.Y = rfb.ReadUInt16();
+			source.X = await rfb.ReadUInt16();
+			source.Y = await rfb.ReadUInt16();
 		}
 
 		public unsafe override void Draw(Bitmap desktop)

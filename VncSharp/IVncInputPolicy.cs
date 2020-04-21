@@ -19,13 +19,15 @@ using System.Drawing;
 
 namespace VncSharp
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// A strategy encapsulating mouse/keyboard input.  Used by VncClient.
 	/// </summary>
 	public interface IVncInputPolicy
 	{
-		void WriteKeyboardEvent(uint keysym, bool pressed);
+		Task WriteKeyboardEvent(uint keysym, bool pressed);
 
-		void WritePointerEvent(byte buttonMask, Point point);
+		Task WritePointerEvent(byte buttonMask, Point point);
 	}
 }

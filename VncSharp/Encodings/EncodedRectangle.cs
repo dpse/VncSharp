@@ -21,7 +21,9 @@ using System.Drawing.Imaging;
 
 namespace VncSharp.Encodings
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// Abstract class representing an Encoded Rectangle to be read, decoded, and drawn.
 	/// </summary>
 	public abstract class EncodedRectangle : IDesktopUpdater
@@ -76,7 +78,7 @@ namespace VncSharp.Encodings
 		/// <summary>
 		/// Obtain all necessary information from VNC Host (i.e., read) in order to Draw the rectangle, and store in colours[].
 		/// </summary>
-		public abstract void Decode();
+		public abstract Task Decode();
 		
 		/// <summary>
 		/// After calling Decode() an EncodedRectangle can be drawn to a Bitmap, which is the local representation of the remote desktop.
@@ -167,7 +169,7 @@ namespace VncSharp.Encodings
 		/// Fills the given Rectangle with pixel values read from the server (i.e., each pixel may have its own value).
 		/// </summary>
 		/// <param name="rect">The rectangle to be filled.</param>
-		protected void FillRectangle(Rectangle rect)
+		protected async Task FillRectangle(Rectangle rect)
 		{
 			var ptr = 0;
 			var offset = 0;
@@ -181,7 +183,7 @@ namespace VncSharp.Encodings
 
 			for (var y = 0; y < rect.Height; ++y) {
 				for (var x = 0; x < rect.Width; ++x) {
-					framebuffer[ptr++] = preader.ReadPixel();	// every pixel needs to be read from server
+					framebuffer[ptr++] = await preader.ReadPixel();	// every pixel needs to be read from server
 				}
 				ptr += offset;								    // advance to next row within pixels
 			}

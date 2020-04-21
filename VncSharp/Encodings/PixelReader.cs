@@ -19,22 +19,26 @@ using System.IO;
 
 namespace VncSharp.Encodings
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    using Overby.Extensions.AsyncBinaryReaderWriter;
+
+    /// <summary>
 	/// Used to read the appropriate number of bytes from the server based on the
 	/// width of pixels and convert to a GDI+ colour value (i.e., BGRA).
 	/// </summary>
 	public abstract class PixelReader
 	{
-		protected BinaryReader reader;
+		protected AsyncBinaryReader reader;
 		protected Framebuffer framebuffer;
 
-		protected PixelReader(BinaryReader reader, Framebuffer framebuffer)
+		protected PixelReader(AsyncBinaryReader reader, Framebuffer framebuffer)
 		{
 			this.reader = reader;
 			this.framebuffer = framebuffer;
 		}
 
-		public abstract int ReadPixel();
+		public abstract Task<int> ReadPixel();
 
 		protected int ToGdiPlusOrder(byte red, byte green, byte blue)
 		{

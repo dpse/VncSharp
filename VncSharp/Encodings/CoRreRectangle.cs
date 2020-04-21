@@ -22,7 +22,9 @@ using System.Drawing;
 
 namespace VncSharp.Encodings
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// Implementation of CoRRE encoding, as well as drawing support. See RFB Protocol document v. 3.8 section 6.5.4.
 	/// </summary>
 	public sealed class CoRreRectangle : EncodedRectangle 
@@ -34,10 +36,10 @@ namespace VncSharp.Encodings
 		/// <summary>
 		/// Decodes a CoRRE Encoded Rectangle.
 		/// </summary>
-		public override void Decode()
+		public override async Task Decode()
 		{
-			var numSubRect = (int) rfb.ReadUint32();	// Number of sub-rectangles within this rectangle
-			var bgPixelVal = preader.ReadPixel();		// Background colour
+			var numSubRect = (int) await rfb.ReadUint32();	// Number of sub-rectangles within this rectangle
+			var bgPixelVal = await preader.ReadPixel();		// Background colour
 			var subRectVal = 0;							// Colour to be used for each sub-rectangle
 			
 			// Dimensions of each sub-rectangle will be read into these
@@ -48,11 +50,11 @@ namespace VncSharp.Encodings
 
 			// Colour in all the subrectangles, reading the properties of each one after another.
 			for (var i = 0; i < numSubRect; i++) {
-				subRectVal	= preader.ReadPixel();
-				x			= rfb.ReadByte();
-				y			= rfb.ReadByte();
-				w			= rfb.ReadByte();
-				h			= rfb.ReadByte();
+				subRectVal	= await preader.ReadPixel();
+				x			= await rfb.ReadByte();
+				y			= await rfb.ReadByte();
+				w			= await rfb.ReadByte();
+				h			= await rfb.ReadByte();
 				
 				// Colour in this sub-rectangle with the colour provided.
 				FillRectangle(new Rectangle(x, y, w, h), subRectVal);

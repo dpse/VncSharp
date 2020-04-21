@@ -24,11 +24,14 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using VncSharp.zlib.NET;
+using Overby.Extensions.AsyncBinaryReaderWriter;
 // ReSharper disable ArrangeAccessorOwnerBody
 
 namespace VncSharp
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// Contains methods and properties to handle all aspects of the RFB Protocol versions 3.3 - 3.8.
 	/// </summary>
 	public class RfbProtocol
@@ -122,7 +125,7 @@ namespace VncSharp
 
 		private TcpClient tcp;			// Network object used to communicate with host
 		private NetworkStream stream;	// Stream object used to send/receive data
-		private BinaryWriter writer;	// sent and received, so these handle this.
+		private AsyncBinaryWriter writer;	// sent and received, so these handle this.
 
 		/// <summary>
 		/// Gets the Protocol Version of the remote VNC Host--probably 3.3, 3.7, or 3.8.
@@ -141,7 +144,7 @@ namespace VncSharp
 		// ReSharper disable once UnusedAutoPropertyAccessor.Local
 		private int ProxyID { get; set; }
 
-		public BinaryReader Reader { get; private set; }
+		public AsyncBinaryReader Reader { get; private set; }
 
 		public ZRLECompressedReader ZrleReader { get; private set; }
 
@@ -151,6 +154,16 @@ namespace VncSharp
 		/// <param name="host">The IP Address or Host Name of the VNC Host.</param>
 		/// <param name="port">The Port number on which to connect.  Usually this will be 5900, except in the case that the VNC Host is running on a different Display, in which case the Display number should be added to 5900 to determine the correct port.</param>
 		public void Connect(string host, int port)
+        {
+            this.ConnectAsync(host, port).RunSynchronously();
+        }
+
+	    /// <summary>
+		/// Attempt to connect to a remote VNC Host.
+		/// </summary>
+		/// <param name="host">The IP Address or Host Name of the VNC Host.</param>
+		/// <param name="port">The Port number on which to connect.  Usually this will be 5900, except in the case that the VNC Host is running on a different Display, in which case the Display number should be added to 5900 to determine the correct port.</param>
+		public async Task ConnectAsync(string host, int port)
 		{
 			if (host == null) throw new ArgumentNullException(nameof(host));
 
@@ -160,7 +173,7 @@ namespace VncSharp
 
 			tcp.ReceiveTimeout = RECEIVE_TIMEOUT; // set receive timeout (15s default)
 			tcp.SendTimeout = SEND_TIMEOUT;    // set send timeout to (15s default)
-			tcp.Connect(host, port);
+			await tcp.ConnectAsync(host, port);
 			stream = tcp.GetStream();
 
 			stream.ReadTimeout = RECEIVE_TIMEOUT; // set read timeout to (15s default)
@@ -193,9 +206,9 @@ namespace VncSharp
 		/// Reads VNC Host Protocol Version message (see RFB Doc v. 3.8 section 6.1.1)
 		/// </summary>
 		/// <exception cref="NotSupportedException">Thrown if the version of the host is not known or supported.</exception>
-		public void ReadProtocolVersion()
+		public async Task ReadProtocolVersion()
 		{
-			var b = Reader.ReadBytes(12);
+			var b = await Reader.ReadBytesAsync(12);
 			string a = "";
 			string s = "";
 			for (int x = 0; x < 12; x++)
@@ -280,45 +293,45 @@ namespace VncSharp
 		/// <summary>
 		/// Send the Protocol Version supported by the client.  Will be highest supported by server (see RFB Doc v. 3.8 section 6.1.1).
 		/// </summary>
-		public void WriteProtocolVersion()
+		public async Task WriteProtocolVersion()
 		{
 			// We will use which ever version the server understands, be it 3.3, 3.7, or 3.8.
 			Debug.Assert(verMinor == 3 || verMinor == 7 || verMinor == 8, "Wrong Protocol Version!",
 				$"Protocol Version should be 3.3, 3.7, or 3.8 but is {verMajor}.{verMinor}");
 
-			writer.Write(GetBytes($"RFB 003.00{verMinor}\n"));
-			writer.Flush();
+			await writer.WriteAsync(GetBytes($"RFB 003.00{verMinor}\n"));
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
 		/// Send the Target Proxy address, needs to be 250 bytes
 		/// </summary>
-		public void WriteProxyAddress()
+		public async Task WriteProxyAddress()
 		{
 			var proxyMessage = new byte[250];
 			GetBytes("ID:" + ProxyID + "\n").CopyTo(proxyMessage, 0);
-			writer.Write(proxyMessage);
-			writer.Flush();
+			await writer.WriteAsync(proxyMessage);
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
 		/// Determine the type(s) of authentication that the server supports. See RFB Doc v. 3.8 section 6.1.2.
 		/// </summary>
 		/// <returns>An array of bytes containing the supported Security Type(s) of the server.</returns>
-		public byte[] ReadSecurityTypes()
+		public async Task<byte[]> ReadSecurityTypes()
 		{
 			// Read and return the types of security supported by the server (see protocol doc 6.1.2)
 			byte[] types;
 			
 			// Protocol Version 3.7 onward supports multiple security types, while 3.3 only 1
 			if (verMinor == 3) {
-				types = new[] { (byte) Reader.ReadUInt32() };
+				types = new[] { (byte) await Reader.ReadUInt32Async() };
 			} else {
-				var num = Reader.ReadByte();
+				var num = await Reader.ReadByteAsync();
 				types = new byte[num];
 				
 				for (var i = 0; i < num; ++i) {
-					types[i] = Reader.ReadByte();
+					types[i] = await Reader.ReadByteAsync();
 				}
 			}
 			return types;
@@ -328,24 +341,24 @@ namespace VncSharp
 		/// If the server has rejected the connection during Authentication, a reason is given. See RFB Doc v. 3.8 section 6.1.2.
 		/// </summary>
 		/// <returns>Returns a string containing the reason for the server rejecting the connection.</returns>
-		public string ReadSecurityFailureReason()
+		public async Task<string> ReadSecurityFailureReason()
 		{
-			var length = (int) Reader.ReadUInt32();
-			return GetString(Reader.ReadBytes(length));
+			var length = (int) await Reader.ReadUInt32Async();
+			return GetString(await Reader.ReadBytesAsync(length));
 		}
 
 		/// <summary>
 		/// Indicate to the server which type of authentication will be used. See RFB Doc v. 3.8 section 6.1.2.
 		/// </summary>
 		/// <param name="type">The type of Authentication to be used, 1 (None) or 2 (VNC Authentication).</param>
-		public void WriteSecurityType(byte type)
+		public async Task WriteSecurityType(byte type)
 		{
 			Debug.Assert(type >= 1, "Wrong Security Type", "The Security Type must be one that requires authentication.");
 			
 			// Only bother writing this byte if the version of the server is 3.7
 			if (verMinor < 7) return;
-			writer.Write(type);
-			writer.Flush();
+			await writer.WriteAsync(type);
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
@@ -353,19 +366,19 @@ namespace VncSharp
 		/// mechanism is used to authenticate the user. See RFB Doc v. 3.8 section 6.1.2 and 6.2.2.
 		/// </summary>
 		/// <returns>Returns the 16 byte Challenge sent by the server.</returns>
-		public byte[] ReadSecurityChallenge()
+		public Task<byte[]> ReadSecurityChallenge()
 		{
-			return Reader.ReadBytes(16);
+			return Reader.ReadBytesAsync(16);
 		}
 
 		/// <summary>
 		/// Sends the encrypted Response back to the server. See RFB Doc v. 3.8 section 6.1.2.
 		/// </summary>
 		/// <param name="response">The DES password encrypted challege sent by the server.</param>
-		public void WriteSecurityResponse(byte[] response)
+		public async Task WriteSecurityResponse(byte[] response)
 		{
-			writer.Write(response, 0, response.Length);
-			writer.Flush();
+			await writer.WriteAsync(response, 0, response.Length);
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
@@ -373,34 +386,34 @@ namespace VncSharp
 		/// sends a status code to indicate whether authentication worked. See RFB Doc v. 3.8 section 6.1.3.
 		/// </summary>
 		/// <returns>An integer indicating the status of authentication: 0 = OK; 1 = Failed; 2 = Too Many (deprecated).</returns>
-		public uint ReadSecurityResult()
+		public Task<uint> ReadSecurityResult()
 		{
-			return Reader.ReadUInt32();
+			return Reader.ReadUInt32Async();
 		}
 
 		/// <summary>
 		/// Sends an Initialisation message to the server. See RFB Doc v. 3.8 section 6.1.4.
 		/// </summary>
 		/// <param name="shared">True if the server should allow other clients to connect, otherwise False.</param>
-		public void WriteClientInitialisation(bool shared)
+		public async Task WriteClientInitialisation(bool shared)
 		{
 			// Non-zero if TRUE, zero if FALSE
-			writer.Write((byte)(shared ? 1 : 0));
-			writer.Flush();
+			await writer.WriteAsync((byte)(shared ? 1 : 0));
+			await writer.FlushAsync();
 		}
 		
 		/// <summary>
 		/// Reads the server's Initialization message, specifically the remote Framebuffer's properties. See RFB Doc v. 3.8 section 6.1.5.
 		/// </summary>
 		/// <returns>Returns a Framebuffer object representing the geometry and properties of the remote host.</returns>
-		public Framebuffer ReadServerInit(int bitsPerPixel, int depth)
+		public async Task< Framebuffer> ReadServerInit(int bitsPerPixel, int depth)
 		{
-			int w = Reader.ReadUInt16();
-			int h = Reader.ReadUInt16();
-			var buffer = Framebuffer.FromPixelFormat(Reader.ReadBytes(16), w, h, bitsPerPixel, depth);
-			var length = (int) Reader.ReadUInt32();
+			int w = await Reader.ReadUInt16Async();
+			int h = await Reader.ReadUInt16Async();
+			var buffer = Framebuffer.FromPixelFormat(await Reader.ReadBytesAsync(16), w, h, bitsPerPixel, depth);
+			var length = (int) await Reader.ReadUInt32Async();
 
-			buffer.DesktopName = GetString(Reader.ReadBytes(length));
+			buffer.DesktopName = GetString(await Reader.ReadBytesAsync(length));
 			
 			return buffer;
 		}
@@ -409,7 +422,7 @@ namespace VncSharp
 		/// Sends the format to be used by the server when sending Framebuffer Updates. See RFB Doc v. 3.8 section 6.3.1.
 		/// </summary>
 		/// <param name="buffer">A Framebuffer telling the server how to encode pixel data. Typically this will be the same one sent by the server during initialization.</param>
-		public void WriteSetPixelFormat(Framebuffer buffer)
+		public async Task WriteSetPixelFormat(Framebuffer buffer)
 		{
 			byte[] buff = new byte[20];
 
@@ -419,15 +432,15 @@ namespace VncSharp
 			buff[2] = 0x00;
 			buff[3] = 0x00;
 			buffer.ToPixelFormat().CopyTo(buff, 4);		// 16-byte Pixel Format
-			writer.Write(buff);
-			writer.Flush();
+			await writer.WriteAsync(buff);
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
 		/// Tell the server which encodings are supported by the client. See RFB Doc v. 3.8 section 6.3.3.
 		/// </summary>
 		/// <param name="encodings">An array of integers indicating the encoding types supported.  The order indicates preference, where the first item is the first preferred.</param>
-		public void WriteSetEncodings(uint[] encodings)
+		public async Task WriteSetEncodings(uint[] encodings)
 		{
 			byte[] buff = new byte[(encodings.Length*4) + 4];
 			int x = 0;
@@ -440,8 +453,8 @@ namespace VncSharp
 				BitConverter.GetBytes(t).Reverse().ToArray().CopyTo(buff, 4+x);
 				x+=4;
 			}
-			writer.Write(buff);
-			writer.Flush();
+			await writer.WriteAsync(buff);
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
@@ -452,7 +465,7 @@ namespace VncSharp
 		/// <param name="width">The width of the area to be updated.</param>
 		/// <param name="height">The height of the area to be updated.</param>
 		/// <param name="incremental">Indicates whether only changes to the client's data should be sent or the entire desktop.</param>
-		public void WriteFramebufferUpdateRequest(ushort x, ushort y, ushort width, ushort height, bool incremental)
+		public async Task WriteFramebufferUpdateRequest(ushort x, ushort y, ushort width, ushort height, bool incremental)
 		{
 			byte[] buff = new byte[10];
 			buff[0] = FRAMEBUFFER_UPDATE_REQUEST;
@@ -461,8 +474,8 @@ namespace VncSharp
 			BitConverter.GetBytes((ushort)y).Reverse().ToArray().CopyTo(buff, 4);
 			BitConverter.GetBytes((ushort)width).Reverse().ToArray().CopyTo(buff, 6);
 			BitConverter.GetBytes((ushort)height).Reverse().ToArray().CopyTo(buff, 8);
-			writer.Write(buff);
-			writer.Flush();
+			await writer.WriteAsync(buff);
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
@@ -470,7 +483,7 @@ namespace VncSharp
 		/// </summary>
 		/// <param name="keysym">The value of the key pressed, expressed using X Window "keysym" values.</param>
 		/// <param name="pressed"></param>
-		public void WriteKeyEvent(uint keysym, bool pressed)
+		public async Task WriteKeyEvent(uint keysym, bool pressed)
 		{
 			byte[] buff = new byte[8];
 			buff[0] = KEY_EVENT;
@@ -478,8 +491,8 @@ namespace VncSharp
 			buff[2] = 0x00;
 			buff[3] = 0x00;
 			BitConverter.GetBytes(keysym).Reverse().ToArray().CopyTo(buff, 4);
-			writer.Write(buff);
-			writer.Flush();
+			await writer.WriteAsync(buff);
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
@@ -487,22 +500,22 @@ namespace VncSharp
 		/// </summary>
 		/// <param name="buttonMask">A bitmask indicating which button(s) are pressed.</param>
 		/// <param name="point">The location of the mouse cursor.</param>
-		public void WritePointerEvent(byte buttonMask, Point point)
+		public async Task WritePointerEvent(byte buttonMask, Point point)
 		{
 			byte[] buff = new byte[6];
 			buff[0] = POINTER_EVENT;
 			buff[1] = buttonMask;
 			BitConverter.GetBytes((ushort)point.X).Reverse().ToArray().CopyTo(buff, 2);
 			BitConverter.GetBytes((ushort)point.Y).Reverse().ToArray().CopyTo(buff, 4);
-			writer.Write(buff);
-			writer.Flush();
+			await writer.WriteAsync(buff);
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
 		/// Sends text in the client's Cut Buffer to the server. See RFB Doc v. 3.8 section 6.3.7.
 		/// </summary>
 		/// <param name="text">The text to be sent to the server.</param>
-		public void WriteClientCutText(string text)
+		public async Task WriteClientCutText(string text)
 		{
 			byte[] buff = new byte[text.Length + 8];
 			buff[0] = CLIENT_CUT_TEXT;
@@ -511,45 +524,50 @@ namespace VncSharp
 			buff[3] = 0x00;
 			BitConverter.GetBytes((uint)text.Length).Reverse().ToArray().CopyTo(buff, 4);
 			GetBytes(text).CopyTo(buff, 8);
-			writer.Write(buff);
-			writer.Flush();
+			await writer.WriteAsync(buff);
+			await writer.FlushAsync();
 		}
 
 		/// <summary>
 		/// Reads the type of message being sent by the server--all messages are prefixed with a message type.
 		/// </summary>
 		/// <returns>Returns the message type as an integer.</returns>
-		public int ReadServerMessageType()
+		public async Task<int> ReadServerMessageType()
 		{
-			return Reader.ReadByte();
-		}
+			var result = (int) await Reader.ReadByteAsync();
+            return result;
+        }
 
 		/// <summary>
 		/// Reads the number of update rectangles being sent by the server. See RFB Doc v. 3.8 section 6.4.1.
 		/// </summary>
 		/// <returns>Returns the number of rectangles that follow.</returns>
-		public int ReadFramebufferUpdate()
+		public async Task<int> ReadFramebufferUpdate()
 		{
-			ReadPadding(1);
-			return Reader.ReadUInt16();
-		}
+			await ReadPadding(1);
+			var result = (int) await Reader.ReadUInt16Async();
+            return result;
+        }
 
 		/// <summary>
 		/// Reads a rectangle's header information, including its encoding. See RFB Doc v. 3.8 section 6.4.1.
 		/// </summary>
 		/// <param name="rectangle">The geometry of the rectangle that is about to be sent.</param>
 		/// <param name="encoding">The encoding used for this rectangle.</param>
-		public void ReadFramebufferUpdateRectHeader(out Rectangle rectangle, out int encoding)
+		public async Task<(Rectangle rectangle, int encoding)> ReadFramebufferUpdateRectHeader()
 		{
-			rectangle = new Rectangle
+			var rectangle = new Rectangle
 			{
-				X = Reader.ReadUInt16(),
-				Y = Reader.ReadUInt16(),
-				Width = Reader.ReadUInt16(),
-				Height = Reader.ReadUInt16()
+				X = await Reader.ReadUInt16Async(),
+				Y = await Reader.ReadUInt16Async(),
+				Width = await Reader.ReadUInt16Async(),
+				Height = await Reader.ReadUInt16Async()
 			};
-			encoding = (int) Reader.ReadUInt32();
-		}
+
+			var encoding = (int) await Reader.ReadUInt32Async();
+
+            return (rectangle, encoding);
+        }
 		
 		// TODO: this colour map code should probably go in Framebuffer.cs
 		public ushort[,] MapEntries { get; } = new ushort[256, 3];
@@ -557,17 +575,17 @@ namespace VncSharp
 		/// <summary>
 		/// Reads 8-bit RGB colour values (or updated values) into the colour map.  See RFB Doc v. 3.8 section 6.5.2.
 		/// </summary>
-		public void ReadColourMapEntry()
+		public async Task ReadColourMapEntry()
 		{
-			ReadPadding(1);
-			var firstColor = ReadUInt16();
-			var nbColors = ReadUInt16();
+			await ReadPadding(1);
+			var firstColor = await ReadUInt16();
+			var nbColors = await ReadUInt16();
 
 			for (var i = 0; i < nbColors; i++, firstColor++)
 			{
-				MapEntries[firstColor, 0] = (byte)(ReadUInt16() * byte.MaxValue / ushort.MaxValue);	// R
-				MapEntries[firstColor, 1] = (byte)(ReadUInt16() * byte.MaxValue / ushort.MaxValue);	// G
-				MapEntries[firstColor, 2] = (byte)(ReadUInt16() * byte.MaxValue / ushort.MaxValue);	// B
+				MapEntries[firstColor, 0] = (byte)(await ReadUInt16() * byte.MaxValue / ushort.MaxValue);	// R
+				MapEntries[firstColor, 1] = (byte)(await ReadUInt16() * byte.MaxValue / ushort.MaxValue);	// G
+				MapEntries[firstColor, 2] = (byte)(await ReadUInt16() * byte.MaxValue / ushort.MaxValue);	// B
 			}
 		} 
 
@@ -575,11 +593,11 @@ namespace VncSharp
 		/// Reads the text from the Cut Buffer on the server. See RFB Doc v. 3.8 section 6.4.4.
 		/// </summary>
 		/// <returns>Returns the text in the server's Cut Buffer.</returns>
-		public string ReadServerCutText()
+		public async Task<string> ReadServerCutText()
 		{
-			ReadPadding(3);
-			var length = (int) Reader.ReadUInt32();
-			return GetString(Reader.ReadBytes(length));
+			await ReadPadding(3);
+			var length = (int) await Reader.ReadUInt32Async();
+			return GetString(await Reader.ReadBytesAsync(length));
 		}
 
 		// ---------------------------------------------------------------------------------------
@@ -589,27 +607,27 @@ namespace VncSharp
 		/// Reads a single UInt32 value from the server, taking care of Big- to Little-Endian conversion.
 		/// </summary>
 		/// <returns>Returns a UInt32 value.</returns>
-		public uint ReadUint32()
+		public Task<uint> ReadUint32()
 		{
-			return Reader.ReadUInt32(); 
+			return Reader.ReadUInt32Async(); 
 		}
 		
 		/// <summary>
 		/// Reads a single UInt16 value from the server, taking care of Big- to Little-Endian conversion.
 		/// </summary>
 		/// <returns>Returns a UInt16 value.</returns>
-		public ushort ReadUInt16()
+		public Task<ushort> ReadUInt16()
 		{
-			return Reader.ReadUInt16(); 
+			return Reader.ReadUInt16Async(); 
 		}
 		
 		/// <summary>
 		/// Reads a single Byte value from the server.
 		/// </summary>
 		/// <returns>Returns a Byte value.</returns>
-		public byte ReadByte()
+		public Task<byte> ReadByte()
 		{
-			return Reader.ReadByte();
+			return Reader.ReadByteAsync();
 		}
 		
 		/// <summary>
@@ -617,55 +635,55 @@ namespace VncSharp
 		/// </summary>
 		/// <param name="count">The number of bytes to be read.</param>
 		/// <returns>Returns a Byte Array containing the values read.</returns>
-		public byte[] ReadBytes(int count)
+		public Task<byte[]> ReadBytes(int count)
 		{
-			return Reader.ReadBytes(count);
+			return Reader.ReadBytesAsync(count);
 		}
 
 		/// <summary>
 		/// Writes a single UInt32 value to the server, taking care of Little- to Big-Endian conversion.
 		/// </summary>
 		/// <param name="value">The UInt32 value to be written.</param>
-		public void WriteUint32(uint value)
+		public Task WriteUint32(uint value)
 		{
-			writer.Write(value);
+			return writer.WriteAsync(value);
 		}
 
 		/// <summary>
 		/// Writes a single UInt16 value to the server, taking care of Little- to Big-Endian conversion.
 		/// </summary>
 		/// <param name="value">The UInt16 value to be written.</param>
-		public void WriteUInt16(ushort value)
+		public Task WriteUInt16(ushort value)
 		{
-			writer.Write(value);
+			return writer.WriteAsync(value);
 		}
 		
 		/// <summary>
 		/// Writes a single Byte value to the server.
 		/// </summary>
 		/// <param name="value">The UInt32 value to be written.</param>
-		public void WriteByte(byte value)
+		public Task WriteByte(byte value)
 		{
-			writer.Write(value);
+			return writer.WriteAsync(value);
 		}
 
 		/// <summary>
 		/// Reads the specified number of bytes of padding (i.e., garbage bytes) from the server.
 		/// </summary>
 		/// <param name="length">The number of bytes of padding to read.</param>
-		protected void ReadPadding(int length)
+		protected Task ReadPadding(int length)
 		{
-			ReadBytes(length);
+			return ReadBytes(length);
 		}
 		
 		/// <summary>
 		/// Writes the specified number of bytes of padding (i.e., garbage bytes) to the server.
 		/// </summary>
 		/// <param name="length">The number of bytes of padding to write.</param>
-		protected void WritePadding(int length)
+		protected Task WritePadding(int length)
 		{
 			var padding = new byte[length];
-			writer.Write(padding, 0, padding.Length);
+			return writer.WriteAsync(padding, 0, padding.Length);
 		}
 
 		/// <summary>
@@ -691,7 +709,7 @@ namespace VncSharp
 		/// <summary>
 		/// BigEndianBinaryReader is a wrapper class used to read .NET integral types from a Big-Endian stream.  It inherits from BinaryReader and adds Big- to Little-Endian conversion.
 		/// </summary>
-		protected sealed class BigEndianBinaryReader : BinaryReader
+		protected sealed class BigEndianBinaryReader : AsyncBinaryReader
 		{
 			private byte[] buff = new byte[4];
 
@@ -704,38 +722,36 @@ namespace VncSharp
 			}
 
 			// Since this is being used to communicate with an RFB host, only some of the overrides are provided below.
-	
-			public override ushort ReadUInt16()
-			{
-				FillBuff(2);
+            public override async Task<ushort> ReadUInt16Async(CancellationToken cancellationToken = default(CancellationToken))
+            {
+                await FillBuff(2);
 				return (ushort)(buff[1] | (uint)buff[0] << 8);
-				
-			}
-			
-			public override short ReadInt16()
-			{
-				FillBuff(2);
+            }
+
+            public override async Task<short> ReadInt16Async(CancellationToken cancellationToken = default(CancellationToken))
+            {
+				await FillBuff(2);
 				return (short)(buff[1] & 0xFF | buff[0] << 8);
-			}
+            }
 
-			public override uint ReadUInt32()
-			{
-				FillBuff(4);
+            public override async Task<uint> ReadUInt32Async(CancellationToken cancellationToken = default(CancellationToken))
+            {
+				await FillBuff(4);
 				return (uint)buff[3] & 0xFF | (uint)buff[2] << 8 | (uint)buff[1] << 16 | (uint)buff[0] << 24;
-			}
-			
-			public override int ReadInt32()
-			{
-				FillBuff(4);
-				return buff[3] | buff[2] << 8 | buff[1] << 16 | buff[0] << 24;
-			}
+            }
 
-			private void FillBuff(int totalBytes)
+            public override async Task<int> ReadInt32Async(CancellationToken cancellationToken = default(CancellationToken))
+            {
+				await FillBuff(4);
+				return buff[3] | buff[2] << 8 | buff[1] << 16 | buff[0] << 24;
+            }
+
+			private async Task FillBuff(int totalBytes)
 			{
 				var bytesRead = 0;
 
 				do {
-					var n = BaseStream.Read(buff, bytesRead, totalBytes - bytesRead);
+					var n = await BaseStream.ReadAsync(buff, bytesRead, totalBytes - bytesRead);
 					
 					if (n == 0)
 						throw new IOException("Unable to read next byte(s).");
@@ -749,7 +765,7 @@ namespace VncSharp
 		/// <summary>
 		/// BigEndianBinaryWriter is a wrapper class used to write .NET integral types in Big-Endian order to a stream.  It inherits from BinaryWriter and adds Little- to Big-Endian conversion.
 		/// </summary>
-		protected sealed class BigEndianBinaryWriter : BinaryWriter
+		protected sealed class BigEndianBinaryWriter : AsyncBinaryWriter
 		{
 			public BigEndianBinaryWriter(Stream input) : base(input)
 			{
@@ -760,78 +776,75 @@ namespace VncSharp
 			}
 			
 			// Flip all little-endian .NET types into big-endian order and send
-			public override void Write(ushort value)
-			{
-				FlipAndWrite(BitConverter.GetBytes(value));
-			}
-			
-			public override void Write(short value)
-			{
-				FlipAndWrite(BitConverter.GetBytes(value));
-			}
+            public override Task WriteAsync(
+                ushort value,
+                CancellationToken cancellationToken = default(CancellationToken)) =>
+                FlipAndWrite(BitConverter.GetBytes(value), cancellationToken);
 
-			public override void Write(uint value)
-			{
-				FlipAndWrite(BitConverter.GetBytes(value));
-			}
-			
-			public override void Write(int value)
-			{
-				FlipAndWrite(BitConverter.GetBytes(value));
-			}
+            public override Task WriteAsync(
+                short value,
+                CancellationToken cancellationToken = default(CancellationToken)) =>
+                FlipAndWrite(BitConverter.GetBytes(value), cancellationToken);
 
-			public override void Write(ulong value)
-			{
-				FlipAndWrite(BitConverter.GetBytes(value));
-			}
-			
-			public override void Write(long value)
-			{
-				FlipAndWrite(BitConverter.GetBytes(value));
-			}
+            public override Task WriteAsync(
+                uint value,
+                CancellationToken cancellationToken = default(CancellationToken)) =>
+                FlipAndWrite(BitConverter.GetBytes(value), cancellationToken);
 
-			private void FlipAndWrite(byte[] b)
+            public override Task WriteAsync(
+                int value,
+                CancellationToken cancellationToken = default(CancellationToken)) =>
+                FlipAndWrite(BitConverter.GetBytes(value), cancellationToken);
+
+            public override Task WriteAsync(
+                ulong value,
+                CancellationToken cancellationToken = default(CancellationToken)) =>
+                FlipAndWrite(BitConverter.GetBytes(value), cancellationToken);
+
+            public override Task WriteAsync(
+                long value,
+                CancellationToken cancellationToken = default(CancellationToken)) =>
+                FlipAndWrite(BitConverter.GetBytes(value), cancellationToken);
+
+			private Task FlipAndWrite(byte[] b, CancellationToken ct)
 			{
 				// Given an array of bytes, flip and write to underlying stream
 				Array.Reverse(b);
-				base.Write(b);
+				return base.WriteAsync(b, ct);
 			}
 		}
 
 		/// <summary>
 		/// ZRLE compressed binary reader, used by ZrleRectangle.
 		/// </summary>
-		public sealed class ZRLECompressedReader : BinaryReader
+		public sealed class ZRLECompressedReader : AsyncBinaryReader
 		{
 		    private MemoryStream zlibMemoryStream;
 		    private ZOutputStream zlibDecompressedStream;
-		    private BinaryReader uncompressedReader;
+		    private AsyncBinaryReader uncompressedReader;
 
 			public ZRLECompressedReader(Stream uncompressedStream) : base(uncompressedStream)
 			{
 				zlibMemoryStream = new MemoryStream();
 				zlibDecompressedStream = new ZOutputStream(zlibMemoryStream);
-				uncompressedReader = new BinaryReader(zlibMemoryStream);
+				uncompressedReader = new AsyncBinaryReader(zlibMemoryStream);
 			}
 
-			public override byte ReadByte()
-			{
-				return uncompressedReader.ReadByte();
-			}
+            public override Task<byte> ReadByteAsync(CancellationToken cancellationToken = default(CancellationToken)) => this.uncompressedReader.ReadByteAsync(cancellationToken);
 
-			public override byte[] ReadBytes(int count)
-			{
-				return uncompressedReader.ReadBytes(count);
-			}
+            public override Task<byte[]> ReadBytesAsync(
+                int count,
+                CancellationToken cancellationToken = default(CancellationToken)) =>
+                this.uncompressedReader.ReadBytesAsync(count, cancellationToken);
 
-			public void DecodeStream()
+			public async Task DecodeStream()
 			{
 				// Reset position to use same buffer
 				zlibMemoryStream.Position = 0;
 
 				// Get compressed stream length to read
 				var buff = new byte[4];
-				if (BaseStream.Read(buff, 0, 4) != 4)
+				if (await BaseStream.ReadAsync(buff, 0, 4) != 4)
 					throw new Exception("ZRLE decoder: Invalid compressed stream size");
 
 				// BigEndian to LittleEndian conversion
@@ -855,6 +868,7 @@ namespace VncSharp
 				netStream.ReadTimeout = 15000; // Set timeout to 15s
 				do
 				{
+                    // TODO remove sleep
 					if (netStream.DataAvailable)
 					{
 						var bytesToRead = bytesNeeded;
@@ -868,7 +882,7 @@ namespace VncSharp
 						int bytesRead = 0;
 						try
 						{	
-							bytesRead = netStream.Read(receiveBuffer, bytesRead, toRead);
+							bytesRead = await netStream.ReadAsync(receiveBuffer, bytesRead, toRead);
 						}
 						catch { }
 						
@@ -876,7 +890,7 @@ namespace VncSharp
 						bytesNeeded -= bytesRead;
 
 						// write the readed bytes to the decompression stream.
-						zlibDecompressedStream.Write(receiveBuffer, 0, bytesRead);
+						await zlibDecompressedStream.WriteAsync(receiveBuffer, 0, bytesRead);
 					}
 					else
 						// there isn't any data atm. let's give the processor some time.

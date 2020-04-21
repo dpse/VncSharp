@@ -28,7 +28,9 @@ using System.Windows.Forms;
 
 namespace VncSharp
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// Delegate definition of an Event Handler used to indicate a Framebuffer Update has been received.
 	/// </summary>
 	public delegate void VncUpdateHandler(object sender, VncEventArgs e);
@@ -94,6 +96,24 @@ namespace VncSharp
 			return Connect(host, display, port, viewOnlyMode);
 		}
 
+		public Task<bool> ConnectAsync(string host, int display, int port)
+		{
+			return ConnectAsync(host, display, port, viewOnlyMode);
+		}
+
+        /// <summary>
+        /// Connect to a VNC Host and determine which type of Authentication it uses. If the host uses Password Authentication, a call to Authenticate() will be required.
+        /// </summary>
+        /// <param name="host">The IP Address or Host Name of the VNC Host.</param>
+        /// <param name="display">The Display number (used on Unix hosts).</param>
+        /// <param name="port">The Port number used by the Host, usually 5900.</param>
+        /// <param name="viewOnly">True if mouse/keyboard events are to be ignored.</param>
+        /// <returns>Returns True if the VNC Host requires a Password to be sent after Connect() is called, otherwise False.</returns>
+        public bool Connect(string host, int display, int port, bool viewOnly)
+        {
+            return ConnectAsync(host, display, port, viewOnly).Result;
+        }
+
 		/// <summary>
 		/// Connect to a VNC Host and determine which type of Authentication it uses. If the host uses Password Authentication, a call to Authenticate() will be required.
 		/// </summary>
@@ -102,7 +122,7 @@ namespace VncSharp
 		/// <param name="port">The Port number used by the Host, usually 5900.</param>
 		/// <param name="viewOnly">True if mouse/keyboard events are to be ignored.</param>
 		/// <returns>Returns True if the VNC Host requires a Password to be sent after Connect() is called, otherwise False.</returns>
-		public bool Connect(string host, int display, int port, bool viewOnly)
+		public async Task<bool> ConnectAsync(string host, int display, int port, bool viewOnly)
 		{
 			if (host == null) throw new ArgumentNullException(nameof(host));
 
@@ -123,22 +143,22 @@ namespace VncSharp
 			
 			// Connect and determine version of server, and set client protocol version to match			
 			try {
-				rfb.Connect(host, port);
-				rfb.ReadProtocolVersion();
+				await rfb.ConnectAsync(host, port);
+				await rfb.ReadProtocolVersion();
 
 				// Handle possible repeater connection
 				if (rfb.ServerVersion == 0.0) {
-					rfb.WriteProxyAddress();
+					await rfb.WriteProxyAddress();
 					// Now we are connected to the real server; read the protocol version of the 
 					// server
-					rfb.ReadProtocolVersion();
+					await rfb.ReadProtocolVersion();
 					// Resume normal handshake and protocol
 				}
 					
-				rfb.WriteProtocolVersion();
+				await rfb.WriteProtocolVersion();
 
 				// Figure out which type of authentication the server uses
-				var types = rfb.ReadSecurityTypes();
+				var types = await rfb.ReadSecurityTypes();
 				
 				// Based on what the server sends back in the way of supported Security Types, one of
 				// two things will need to be done: either the server will reject the connection (i.e., type = 0),
@@ -155,11 +175,11 @@ namespace VncSharp
 			    securityType = GetSupportedSecurityType(types);
 				Debug.Assert(securityType > 0, "Unknown Security Type(s)", "The server sent one or more unknown Security Types.");
 						
-			    rfb.WriteSecurityType(securityType);
+			    await rfb.WriteSecurityType(securityType);
 						
 			    // Protocol 3.8 states that a SecurityResult is still sent when using NONE (see 6.2.1)
 			    if (rfb.ServerVersion != 3.8f || securityType != 1) return securityType > 1;
-			    if (rfb.ReadSecurityResult() > 0) {
+			    if (await rfb.ReadSecurityResult() > 0) {
 			        // For some reason, the server is not accepting the connection.  Get the
 			        // reason and throw an exception
 			        throw new VncProtocolException("Unable to Connecto to the Server. The Server rejected the connection for the following reason: " + rfb.ReadSecurityFailureReason());
@@ -182,6 +202,11 @@ namespace VncSharp
 			return Connect(host, 0, 5900);
 		}
 
+		public Task<bool> ConnectAsync(string host)
+		{
+			return ConnectAsync(host, 0, 5900);
+		}
+
 		/// <summary>
 		/// Connect to a VNC Host and determine which type of Authentication it uses. If the host uses Password Authentication, a call to Authenticate() will be required. The Port number is calculated based on the Display.
 		/// </summary>
@@ -191,6 +216,11 @@ namespace VncSharp
 		public bool Connect(string host, int display)
 		{
 			return Connect(host, display, 5900);
+		}
+
+		public Task<bool> ConnectAsync(string host, int display)
+		{
+			return ConnectAsync(host, display, 5900);
 		}
 
 		/// <summary>
@@ -221,26 +251,26 @@ namespace VncSharp
 		/// </summary>
 		/// <param name="password">The password to use.</param>
 		/// <returns>Returns True if Authentication worked, otherwise False.</returns>
-		public bool Authenticate(string password)
+		public async Task<bool> Authenticate(string password)
 		{
 			if (password == null) throw new ArgumentNullException(nameof(password));
 			
 			// If new Security Types are supported in future, add the code here.  For now, only 
 			// VNC Authentication is supported.
 			if (securityType == 2) {
-				PerformVncAuthentication(password);
+			    await PerformVncAuthentication(password);
 			} else {
 				throw new NotSupportedException("Unable to Authenticate with Server. The Server uses an Authentication scheme unknown to the client.");
 			}
 			
-			if (rfb.ReadSecurityResult() == 0) {
+			if (await rfb.ReadSecurityResult() == 0) {
 				return true;
 			}
 		    // Authentication failed, and if the server is using Protocol version 3.8, a 
 		    // plain text message follows indicating why the error happend.  I'm not 
 		    // currently using this message, but it is read here to clean out the stream.
 		    // In earlier versions of the protocol, the server will just drop the connection.
-		    if (rfb.ServerVersion == 3.8) rfb.ReadSecurityFailureReason();
+		    if (rfb.ServerVersion == 3.8) await rfb.ReadSecurityFailureReason();
 		    rfb.Close();	// TODO: Is this the right place for this???
 		    return false;
 		}
@@ -249,10 +279,10 @@ namespace VncSharp
 		/// Performs VNC Authentication using VNC DES encryption.  See the RFB Protocol doc 6.2.2.
 		/// </summary>
 		/// <param name="password">A string containing the user's password in clear text format.</param>
-		private void PerformVncAuthentication(string password)
+		private async Task PerformVncAuthentication(string password)
 		{
-			var challenge = rfb.ReadSecurityChallenge();
-			rfb.WriteSecurityResponse(EncryptChallenge(password, challenge));
+			var challenge = await rfb.ReadSecurityChallenge();
+			await rfb.WriteSecurityResponse(EncryptChallenge(password, challenge));
 		}
 
 		/// <summary>
@@ -296,20 +326,20 @@ namespace VncSharp
 		/// <summary>
 		/// Finish setting-up protocol with VNC Host.  Should be called after Connect and Authenticate (if password required).
 		/// </summary>
-		public void Initialize(int bitsPerPixel, int depth)
+		public async Task Initialize(int bitsPerPixel, int depth)
 		{
 			// Finish initializing protocol with host
-			rfb.WriteClientInitialisation(true);  // Allow the desktop to be shared
-			Framebuffer = rfb.ReadServerInit(bitsPerPixel, depth);
+			await rfb.WriteClientInitialisation(true);  // Allow the desktop to be shared
+			Framebuffer = await rfb.ReadServerInit(bitsPerPixel, depth);
 
-			rfb.WriteSetEncodings(new uint[] {	RfbProtocol.ZRLE_ENCODING,
+			await rfb.WriteSetEncodings(new uint[] {	RfbProtocol.ZRLE_ENCODING,
 			                                    RfbProtocol.HEXTILE_ENCODING, 
 											//	RfbProtocol.CORRE_ENCODING, // CoRRE is buggy in some hosts, so don't bother using
 												RfbProtocol.RRE_ENCODING,
 												RfbProtocol.COPYRECT_ENCODING,
 												RfbProtocol.RAW_ENCODING });
 
-			rfb.WriteSetPixelFormat(Framebuffer);	// set the required ramebuffer format
+			await rfb.WriteSetPixelFormat(Framebuffer);	// set the required ramebuffer format
             
 			// Create an EncodedRectangleFactory so that EncodedRectangles can be built according to set pixel layout
 			factory = new EncodedRectangleFactory(rfb, Framebuffer);
@@ -320,8 +350,21 @@ namespace VncSharp
 		/// </summary>
 		public void StartUpdates()
 		{
-			// Start getting updates on background thread.
-			worker = new Thread(GetRfbUpdates);
+            // Start getting updates on background thread.
+            var tcs = new TaskCompletionSource<object>();
+            worker = new Thread(
+                () =>
+                    {
+                        try
+                        {
+                            this.GetRfbUpdates().Wait();
+                            tcs.SetResult(null);
+                        }
+                        catch (Exception e)
+                        {
+                            tcs.SetException(e);
+                        }
+                    });
             // Bug Fix (Grégoire Pailler) for clipboard and threading
             worker.SetApartmentState(ApartmentState.STA);
             worker.IsBackground = true;
@@ -332,7 +375,7 @@ namespace VncSharp
 		/// <summary>
 		/// Stops sending requests for updates and disconnects from the remote host.  You must call Connect() again if you wish to re-establish a connection.
 		/// </summary>
-		public void Disconnect()
+		public async Task Disconnect()
 		{
 			// Stop the worker thread.
 			if (done != null)
@@ -341,7 +384,7 @@ namespace VncSharp
 			// BUG FIX: Simon.Phillips@warwick.ac.uk for UltraVNC disconnect issue
 			// Request a tiny screen update to flush the blocking read
 			try {
-				rfb.WriteFramebufferUpdateRequest(0, 0, 1, 1, false);
+				await rfb.WriteFramebufferUpdateRequest(0, 0, 1, 1, false);
 			} catch {
 				// this may not work, as Disconnect can get called in response to the
 				// VncClient raising a ConnectionLost event (e.g., the remote host died).
@@ -366,11 +409,11 @@ namespace VncSharp
 		/// <summary>
 		/// Worker thread lives here and processes protocol messages infinitely, triggering events or other actions as necessary.
 		/// </summary>
-		private void GetRfbUpdates()
+		private async Task GetRfbUpdates()
 		{
 			// Get the initial destkop from the host
 			int connLostCount = 0;
-			RequestScreenUpdate(true);
+			await RequestScreenUpdate(true);
 
 			while (true) {
 				if (CheckIfThreadDone())
@@ -378,9 +421,9 @@ namespace VncSharp
 
                 try {
                     // ReSharper disable once SwitchStatementMissingSomeCases
-                    switch (rfb.ReadServerMessageType()) {
+                    switch (await rfb.ReadServerMessageType()) {
                         case RfbProtocol.FRAMEBUFFER_UPDATE:
-                            var rectangles = rfb.ReadFramebufferUpdate();
+                            var rectangles = await rfb.ReadFramebufferUpdate();
 
                             if (CheckIfThreadDone())
                                 break;
@@ -388,11 +431,11 @@ namespace VncSharp
                             // TODO: consider gathering all update rectangles in a batch and *then* posting the event back to the main thread.
                             for (var i = 0; i < rectangles; ++i) {
                                 // Get the update rectangle's info
-                                rfb.ReadFramebufferUpdateRectHeader(out Rectangle rectangle, out int enc);
+                                var (rectangle, enc) = await rfb.ReadFramebufferUpdateRectHeader();
 
                                 // Build a derived EncodedRectangle type and pull-down all the pixel info
                                 var er = factory.Build(rectangle, enc);
-                                er.Decode();
+                                await er.Decode();
 
                                 // Let the UI know that an updated rectangle is available, but check
                                 // to see if the user closed things down first.
@@ -417,16 +460,16 @@ namespace VncSharp
                             if (CheckIfThreadDone())
                                 break;
                             // TODO: This is invasive, should there be a bool property allowing this message to be ignored?
-                            Clipboard.SetDataObject(rfb.ReadServerCutText().Replace("\n", Environment.NewLine), true);
+                            Clipboard.SetDataObject((await rfb.ReadServerCutText()).Replace("\n", Environment.NewLine), true);
                             OnServerCutText();
                             break;
                         case RfbProtocol.SET_COLOUR_MAP_ENTRIES:
-                            rfb.ReadColourMapEntry();
+                            await rfb.ReadColourMapEntry();
                             break;
                     }
                     // Moved screen update request here to prevent it being called multiple times
                     // This was the case when multiple rectangles were returned by the host
-                    RequestScreenUpdate(FullScreenRefresh);
+                    await RequestScreenUpdate(FullScreenRefresh);
                     connLostCount = 0;
                     
                 } catch
@@ -435,7 +478,7 @@ namespace VncSharp
                     if (connLostCount++ > 1)
                         OnConnectionLost();
                     else
-                        RequestScreenUpdate(true);
+                        await RequestScreenUpdate(true);
                 }
                 FullScreenRefresh = false;
             }
@@ -482,10 +525,10 @@ namespace VncSharp
 		}
 #endif
 
-        public void WriteClientCutText(string text)
+        public async Task WriteClientCutText(string text)
         {
             try {
-                rfb.WriteClientCutText(text);
+                await rfb.WriteClientCutText(text);
             } catch {
                 OnConnectionLost();
             }
@@ -521,10 +564,10 @@ namespace VncSharp
 		/// almost always set refreshFullScreen to FALSE.  If the client-side image becomes corrupted, call RequestScreenUpdate with
 		/// refreshFullScreen set to TRUE to get the complete image sent again.
 		/// </remarks>
-		public void RequestScreenUpdate(bool refreshFullScreen)
+		public async Task RequestScreenUpdate(bool refreshFullScreen)
 		{
 			try {
-				rfb.WriteFramebufferUpdateRequest(0, 0, (ushort) Framebuffer.Width, (ushort) Framebuffer.Height, !refreshFullScreen);
+				await rfb.WriteFramebufferUpdateRequest(0, 0, (ushort) Framebuffer.Width, (ushort) Framebuffer.Height, !refreshFullScreen);
 			} catch {
 				OnConnectionLost();
 			}

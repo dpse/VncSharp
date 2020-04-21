@@ -20,7 +20,9 @@ using System.Drawing;
 
 namespace VncSharp.Encodings
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// Implementation of ZRLE encoding, as well as drawing support. See RFB Protocol document v. 3.8 section 6.6.5.
 	/// </summary>
 	public sealed class ZrleRectangle : EncodedRectangle
@@ -36,9 +38,9 @@ namespace VncSharp.Encodings
 		{
 		}
 
-		public override void Decode()
+		public override async Task Decode()
 		{
-			rfb.ZrleReader.DecodeStream();
+			await rfb.ZrleReader.DecodeStream();
 
 			for (var ty = 0; ty < rectangle.Height; ty += TILE_HEIGHT) {
 				var th = Math.Min(rectangle.Height - ty, TILE_HEIGHT);
@@ -46,7 +48,7 @@ namespace VncSharp.Encodings
 				for (var tx = 0; tx < rectangle.Width; tx += TILE_WIDTH) {
 					var tw = Math.Min(rectangle.Width - tx, TILE_WIDTH);
 
-					var subencoding = rfb.ZrleReader.ReadByte();
+					var subencoding = await rfb.ZrleReader.ReadByteAsync();
 
 					if (subencoding >= 17 && subencoding <= 127 || subencoding == 129)
 						throw new Exception("Invalid subencoding value");
@@ -56,7 +58,7 @@ namespace VncSharp.Encodings
 
 					// Fill palette
 					for (var i = 0; i < paletteSize; i++)
-						palette[i] = preader.ReadPixel();
+						palette[i] = await preader.ReadPixel();
 
 					if (paletteSize == 1) {
 						// Solid tile
@@ -67,20 +69,20 @@ namespace VncSharp.Encodings
 					if (!isRLE) {
 						if (paletteSize == 0) {
 							// Raw pixel data
-							FillRectangle(new Rectangle(tx, ty, tw, th));
+							await FillRectangle(new Rectangle(tx, ty, tw, th));
 						} else {
 							// Packed palette
-							ReadZrlePackedPixels(tw, th, palette, paletteSize, tileBuffer);
+							await ReadZrlePackedPixels(tw, th, palette, paletteSize, tileBuffer);
 							FillRectangle(new Rectangle(tx, ty, tw, th), tileBuffer);
 						}
 					} else {
 						if (paletteSize == 0) {
 							// Plain RLE
-							ReadZrlePlainRLEPixels(tw, th, tileBuffer);
+							await ReadZrlePlainRLEPixels(tw, th, tileBuffer);
 							FillRectangle(new Rectangle(tx, ty, tw, th), tileBuffer);
 						} else {
 							// Packed RLE palette
-							ReadZrlePackedRLEPixels(tx, ty, tw, th, palette, tileBuffer);
+							await ReadZrlePackedRLEPixels(tx, ty, tw, th, palette, tileBuffer);
 							FillRectangle(new Rectangle(tx, ty, tw, th), tileBuffer);
 						}
 					}
@@ -88,7 +90,7 @@ namespace VncSharp.Encodings
 			}
 		}
 		
-		private void ReadZrlePackedPixels(int tw, int th, int[] palette, int palSize, int[] tile)
+		private async Task ReadZrlePackedPixels(int tw, int th, int[] palette, int palSize, int[] tile)
 		{
 			var bppp = palSize > 16 ? 8 :
 			    (palSize > 4 ? 4 : (palSize > 2 ? 2 : 1));
@@ -101,7 +103,7 @@ namespace VncSharp.Encodings
 
 				while (ptr < eol) {
 					if (nbits == 0)	{
-						b = rfb.ZrleReader.ReadByte();
+						b = await rfb.ZrleReader.ReadByteAsync();
 						nbits = 8;
 					}
 					nbits -= bppp;
@@ -111,16 +113,16 @@ namespace VncSharp.Encodings
 			}
 		}
 
-		private void ReadZrlePlainRLEPixels(int tw, int th, int[] tileBuffer)
+		private async Task ReadZrlePlainRLEPixels(int tw, int th, int[] tileBuffer)
 		{
 			var ptr = 0;
 			var end = ptr + tw * th;
 			while (ptr < end) {
-				var pix = preader.ReadPixel();
+				var pix = await preader.ReadPixel();
 				var len = 1;
 				int b;
 				do {
-					b = rfb.ZrleReader.ReadByte();
+					b = await rfb.ZrleReader.ReadByteAsync();
 					len += b;
 				} while (b == byte.MaxValue);
 
@@ -128,17 +130,17 @@ namespace VncSharp.Encodings
 			}
 		}
 
-		private void ReadZrlePackedRLEPixels(int tx, int ty, int tw, int th, int[] palette, int[] tile)
+		private async Task ReadZrlePackedRLEPixels(int tx, int ty, int tw, int th, int[] palette, int[] tile)
 		{
 			var ptr = 0;
 			var end = ptr + tw * th;
 			while (ptr < end) {
-				int index = rfb.ZrleReader.ReadByte();
+				int index = await rfb.ZrleReader.ReadByteAsync();
 				var len = 1;
 				if ((index & 128) != 0) {
 					int b;
 					do {
-						b = rfb.ZrleReader.ReadByte();
+						b = await rfb.ZrleReader.ReadByteAsync();
 						len += b;
 					} while (b == byte.MaxValue);
 				}

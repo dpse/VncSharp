@@ -20,7 +20,9 @@ using System.Drawing;
 
 namespace VncSharp
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// A view-only version of IVncInputPolicy.
 	/// </summary>
 	public sealed class VncViewInputPolicy : IVncInputPolicy
@@ -30,12 +32,14 @@ namespace VncSharp
 			Debug.Assert(rfb != null);
 		}
 
-		public void WriteKeyboardEvent(uint keysym, bool pressed)
-		{
-		}
+		public Task WriteKeyboardEvent(uint keysym, bool pressed)
+        {
+            return Task.CompletedTask;
+        }
 
-		public void WritePointerEvent(byte buttonMask, Point point)
-		{
-		}
+		public Task WritePointerEvent(byte buttonMask, Point point)
+        {
+            return Task.CompletedTask;
+        }
 	}
 }

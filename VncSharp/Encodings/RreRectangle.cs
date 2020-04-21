@@ -19,7 +19,9 @@ using System.Drawing;
 
 namespace VncSharp.Encodings
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// Implementation of RRE encoding, as well as drawing support. See RFB Protocol document v. 3.8 section 6.5.3.
 	/// </summary>
 	public sealed class RreRectangle : EncodedRectangle 
@@ -29,10 +31,10 @@ namespace VncSharp.Encodings
 		{
 		}
 
-		public override void Decode()
+		public override async Task Decode()
 		{
-			var numSubRect = (int) rfb.ReadUint32();	// Number of sub-rectangles within this rectangle
-			var bgPixelVal = preader.ReadPixel();		// Background colour
+			var numSubRect = (int) await rfb.ReadUint32();	// Number of sub-rectangles within this rectangle
+			var bgPixelVal = await preader.ReadPixel();		// Background colour
 			var subRectVal = 0;							// Colour to be used for each sub-rectangle
 			
 			// Dimensions of each sub-rectangle will be read into these
@@ -43,11 +45,11 @@ namespace VncSharp.Encodings
 
 			// Colour in all the subrectangles, reading the properties of each one after another.
 			for (var i = 0; i < numSubRect; i++) {
-				subRectVal	= preader.ReadPixel();
-				x			= rfb.ReadUInt16();
-				y			= rfb.ReadUInt16();
-				w			= rfb.ReadUInt16();
-				h			= rfb.ReadUInt16();
+				subRectVal	= await preader.ReadPixel();
+				x			= await rfb.ReadUInt16();
+				y			= await rfb.ReadUInt16();
+				w			= await rfb.ReadUInt16();
+				h			= await rfb.ReadUInt16();
 				
 				// Colour in this sub-rectangle
 				FillRectangle(new Rectangle(x, y, w, h), subRectVal);

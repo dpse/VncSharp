@@ -35,6 +35,8 @@ using static System.Reflection.Assembly;
 
 namespace VncSharp
 {
+    using System.Threading.Tasks;
+
     /// <summary>
     /// Event Handler delegate declaration used by events that signal successful connection with the server.
     /// </summary>
@@ -291,6 +293,12 @@ namespace VncSharp
             Connect(host, 0);
         }
 
+        public Task ConnectAsync(string host)
+        {
+            // Use Display 0 by default.
+            return ConnectAsync(host, 0);
+        }
+
         /// <summary>
         /// Connect to a VNC Host and determine whether or not the server requires a password.
         /// </summary>
@@ -303,6 +311,12 @@ namespace VncSharp
         {
             // Use Display 0 by default.
             Connect(host, 0, viewOnly);
+        }
+
+        public Task ConnectAsync(string host, bool viewOnly)
+        {
+            // Use Display 0 by default.
+            return ConnectAsync(host, 0, viewOnly);
         }
 
         /// <summary>
@@ -320,6 +334,12 @@ namespace VncSharp
             Connect(host, 0, viewOnly, scaled);
         }
 
+        public Task ConnectAsync(string host, bool viewOnly, bool scaled)
+        {
+            // Use Display 0 by default.
+            return ConnectAsync(host, 0, viewOnly, scaled);
+        }
+
         /// <summary>
         /// Connect to a VNC Host and determine whether or not the server requires a password.
         /// </summary>
@@ -331,6 +351,11 @@ namespace VncSharp
         public void Connect(string host, int display)
         {
             Connect(host, display, viewOnlyMode);
+        }
+
+        public Task ConnectAsync(string host, int display)
+        {
+            return ConnectAsync(host, display, viewOnlyMode);
         }
 
         /// <summary>
@@ -347,6 +372,11 @@ namespace VncSharp
             Connect(host, display, viewOnly, false);
         }
 
+        public Task ConnectAsync(string host, int display, bool viewOnly)
+        {
+            return ConnectAsync(host, display, viewOnly, false);
+        }
+
         /// <summary>
         /// Connect to a VNC Host and determine whether or not the server requires a password.
         /// </summary>
@@ -357,7 +387,19 @@ namespace VncSharp
         /// <exception cref="System.ArgumentNullException">Thrown if host is null.</exception>
         /// <exception cref="System.ArgumentOutOfRangeException">Thrown if display is negative.</exception>
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is already Connected.  See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
-        public void Connect(string host, int display, bool viewOnly, bool scaled)
+        public void Connect(string host, int display, bool viewOnly, bool scaled) => ConnectAsync(host, display, viewOnly, scaled).RunSynchronously();
+
+        /// <summary>
+        /// Connect to a VNC Host and determine whether or not the server requires a password.
+        /// </summary>
+        /// <param name="host">The IP Address or Host Name of the VNC Host.</param>
+        /// <param name="display">The Display number (used on Unix hosts).</param>
+        /// <param name="viewOnly">Determines whether mouse and keyboard events will be sent to the host.</param>
+        /// <param name="scaled">Determines whether to use desktop scaling or leave it normal and clip.</param>
+        /// <exception cref="System.ArgumentNullException">Thrown if host is null.</exception>
+        /// <exception cref="System.ArgumentOutOfRangeException">Thrown if display is negative.</exception>
+        /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is already Connected.  See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
+        public async Task ConnectAsync(string host, int display, bool viewOnly, bool scaled)
         {
             // TODO: Should this be done asynchronously so as not to block the UI?  Since an event 
             // indicates the end of the connection, maybe that would be a better design.
@@ -374,7 +416,7 @@ namespace VncSharp
             vnc.ServerCutText += VncServerCutText;
             vnc.ViewOnly = viewOnly;
 
-            passwordPending = vnc.Connect(host, display, VncPort, viewOnly);
+            passwordPending = await vnc.ConnectAsync(host, display, VncPort, viewOnly);
 
             SetScalingMode(scaled);
 
@@ -384,12 +426,12 @@ namespace VncSharp
                 var password = GetPassword();
 
                 if (password != null)
-                    Authenticate(password);
+                    await Authenticate(password);
             }
             else
             {
                 // No password needed, so go ahead and Initialize here
-                Initialize();
+                await Initialize();
             }
         }
 
@@ -399,7 +441,7 @@ namespace VncSharp
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is already Connected.  See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
         /// <exception cref="System.NullReferenceException">Thrown if the password is null.</exception>
         /// <param name="password">The user's password.</param>
-        private void Authenticate(string password)
+        private async Task Authenticate(string password)
         {
             InsureConnection(false);
             if (!passwordPending)
@@ -408,8 +450,8 @@ namespace VncSharp
             if (password == null) throw new NullReferenceException("password");
 
             passwordPending = false; // repeated calls to Authenticate should fail.
-            if (vnc.Authenticate(password))
-                Initialize();
+            if (await vnc.Authenticate(password))
+                await Initialize();
             else
                 OnConnectionLost();
         }
@@ -479,11 +521,11 @@ namespace VncSharp
         /// After protocol-level initialization and connecting is complete, the local GUI objects have to be set-up, and requests for updates to the remote host begun.
         /// </summary>
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is already in the Connected state.  See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>		
-        private void Initialize()
+        private async Task Initialize()
         {
             // Finish protocol handshake with host now that authentication is done.
             InsureConnection(false);
-            vnc.Initialize(bitsPerPixel, depth);
+            await vnc.Initialize(bitsPerPixel, depth);
             SetState(RuntimeState.Connected);
 
             // Create a buffer on which updated rectangles will be drawn and draw a "please wait..." 
@@ -584,10 +626,19 @@ namespace VncSharp
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is not already in the Connected state. See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
         public void Disconnect()
         {
+            this.DisconnectAsync().RunSynchronously();
+        }
+
+        /// <summary>
+        /// Stops the remote host from sending further updates and disconnects.
+        /// </summary>
+        /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is not already in the Connected state. See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
+        public async Task DisconnectAsync()
+        {
             InsureConnection(true);
             vnc.ConnectionLost -= VncClientConnectionLost;
             vnc.ServerCutText -= VncServerCutText;
-            vnc.Disconnect();
+            await vnc.Disconnect();
             SetState(RuntimeState.Disconnected);
             OnConnectionLost();
             Invalidate();
@@ -605,9 +656,9 @@ namespace VncSharp
         /// Fills the remote server's clipboard with text.
         /// </summary>
         /// <param name="text">The text to put in the server's clipboard.</param>
-        private void FillServerClipboard(string text)
+        private Task FillServerClipboard(string text)
         {
-            vnc.WriteClientCutText(text);
+            return vnc.WriteClientCutText(text);
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2213:DisposableFieldsShouldBeDisposed", MessageId = "desktop")]
@@ -617,7 +668,7 @@ namespace VncSharp
             {
                 // Make sure the connection is closed--should never happen :)
                 if (state != RuntimeState.Disconnected)
-                    Disconnect();
+                    DisconnectAsync().RunSynchronously();
 
                 // See if either of the bitmaps used need clean-up.  
                 // CodeAnalysis doesn't like null propagation...
@@ -708,7 +759,7 @@ namespace VncSharp
         /// </summary>
         /// <param name="sender">The VncClient object that raised the event.</param>
         /// <param name="e">An empty EventArgs object.</param>
-        private void VncClientConnectionLost(object sender, EventArgs e)
+        private async void VncClientConnectionLost(object sender, EventArgs e)
         {
             // If the remote host dies, and there are attempts to write
             // keyboard/mouse/update notifications, this may get called 
@@ -716,7 +767,7 @@ namespace VncSharp
             // Guard against this and invoke Disconnect once.
             if (state != RuntimeState.Connected) return;
             SetState(RuntimeState.Disconnecting);
-            Disconnect();
+            await DisconnectAsync();
         }
 
         // Handle the VncClient ServerCutText event and bubble it up as ClipboardChanged.

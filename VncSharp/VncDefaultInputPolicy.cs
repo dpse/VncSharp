@@ -20,7 +20,9 @@ using System.Drawing;
 
 namespace VncSharp
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// An interaction enabled version of IVncInputPolicy.
 	/// </summary>
 	public sealed class VncDefaultInputPolicy : IVncInputPolicy
@@ -35,14 +37,14 @@ namespace VncSharp
 
 		// Let all exceptions get caught in VncClient
 
-		public void WriteKeyboardEvent(uint keysym, bool pressed)
+		public Task WriteKeyboardEvent(uint keysym, bool pressed)
 		{
-			rfb.WriteKeyEvent(keysym, pressed);
+			return rfb.WriteKeyEvent(keysym, pressed);
 		}
 
-		public void WritePointerEvent(byte buttonMask, Point point)
+		public Task WritePointerEvent(byte buttonMask, Point point)
 		{
-			rfb.WritePointerEvent(buttonMask, point);
+			return rfb.WritePointerEvent(buttonMask, point);
 		}
 	}
 }

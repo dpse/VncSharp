@@ -19,7 +19,9 @@ using System.Drawing;
 
 namespace VncSharp.Encodings
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    /// <summary>
 	/// Implementation of Hextile encoding, as well as drawing support. See RFB Protocol document v. 3.8 section 6.5.5.
 	/// </summary>
 	public sealed class HextileRectangle : EncodedRectangle 
@@ -35,7 +37,7 @@ namespace VncSharp.Encodings
 		{
 		}
 
-		public override void Decode()
+		public override async Task Decode()
 		{
 			// Subrectangle co-ordinates and info
 			int sx;
@@ -69,34 +71,34 @@ namespace VncSharp.Encodings
 					var tlStart = ty * rectangle.Width + tx;
 					var tlOffset = rectangle.Width - tw;
 
-					var subencoding = rfb.ReadByte();
+					var subencoding = await rfb.ReadByte();
 
 					// See if Raw bit is set in subencoding, and if so, ignore all other bits
 					if ((subencoding & RAW) != 0) {
-						FillRectangle(new Rectangle(tx, ty, tw, th));
+						await FillRectangle(new Rectangle(tx, ty, tw, th));
 					} else {
 						if ((subencoding & BACKGROUND_SPECIFIED) != 0) {
-							backgroundPixelValue = preader.ReadPixel();
+							backgroundPixelValue = await preader.ReadPixel();
 						}
 
 						// Fill-in background colour
 						FillRectangle(new Rectangle(tx, ty, tw, th), backgroundPixelValue);
 												
 						if ((subencoding & FOREGROUND_SPECIFIED) != 0) {
-							foregroundPixelValue = preader.ReadPixel();
+							foregroundPixelValue = await preader.ReadPixel();
 						}
 
 						if ((subencoding & ANY_SUBRECTS) != 0) {
 							// Get the number of sub-rectangles in this tile
-							numSubrects = rfb.ReadByte();
+							numSubrects = await rfb.ReadByte();
 
 							for (var i = 0; i < numSubrects; i++) {
 								if ((subencoding & SUBRECTS_COLOURED) != 0) {
-									foregroundPixelValue = preader.ReadPixel();	// colour of this sub rectangle
+									foregroundPixelValue = await preader.ReadPixel();	// colour of this sub rectangle
 								}
 
-								xANDy = rfb.ReadByte();					// X-position (4 bits) and Y-Postion (4 bits) of this sub rectangle in the tile
-								widthANDheight = rfb.ReadByte();		// Width (4 bits) and Height (4 bits) of this sub rectangle
+								xANDy = await rfb.ReadByte();					// X-position (4 bits) and Y-Postion (4 bits) of this sub rectangle in the tile
+								widthANDheight = await rfb.ReadByte();		// Width (4 bits) and Height (4 bits) of this sub rectangle
 								
 								// Get the proper x, y, w, and h values out of xANDy and widthANDheight
 								sx = (xANDy >> 4) & 0xf;

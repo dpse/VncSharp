@@ -19,19 +19,23 @@ using System.IO;
 
 namespace VncSharp.Encodings
 {
-	/// <summary>
+    using System.Threading.Tasks;
+
+    using Overby.Extensions.AsyncBinaryReaderWriter;
+
+    /// <summary>
 	/// A 32-bit PixelReader.
 	/// </summary>
 	public sealed class PixelReader32 : PixelReader
 	{
-		public PixelReader32(BinaryReader reader, Framebuffer framebuffer) : base(reader, framebuffer)
+		public PixelReader32(AsyncBinaryReader reader, Framebuffer framebuffer) : base(reader, framebuffer)
 		{
 		}
 	
-		public override int ReadPixel()
+		public override async Task<int> ReadPixel()
 		{
 			// Read the pixel value
-			var b = reader.ReadBytes(4);
+			var b = await reader.ReadBytesAsync(4);
 
             var pixel = (uint)b[0] & 0xFF | 
                          (uint)b[1] << 8   | 
