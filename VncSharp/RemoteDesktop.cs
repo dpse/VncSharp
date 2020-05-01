@@ -35,6 +35,7 @@ using static System.Reflection.Assembly;
 
 namespace VncSharp
 {
+    using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -390,6 +391,8 @@ namespace VncSharp
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is already Connected.  See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
         public void Connect(string host, int display, bool viewOnly, bool scaled) => ConnectAsync(host, display, viewOnly, scaled).RunSynchronously();
 
+        public void Connect(Stream stream, bool viewOnly, bool scaled) => ConnectAsync(stream, viewOnly, scaled).RunSynchronously();
+
         /// <summary>
         /// Connect to a VNC Host and determine whether or not the server requires a password.
         /// </summary>
@@ -402,38 +405,53 @@ namespace VncSharp
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is already Connected.  See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
         public async Task ConnectAsync(string host, int display, bool viewOnly, bool scaled, CancellationToken ct = default)
         {
-            // TODO: Should this be done asynchronously so as not to block the UI?  Since an event 
-            // indicates the end of the connection, maybe that would be a better design.
-            InsureConnection(false);
-
             if (host == null) throw new ArgumentNullException(nameof(host));
             if (display < 0)
                 throw new ArgumentOutOfRangeException(nameof(display), display,
                     "Display number must be a positive integer.");
 
-            // Start protocol-level handling and determine whether a password is needed
-            vnc = new VncClient();
-            vnc.ConnectionLost += VncClientConnectionLost;
-            vnc.ServerCutText += VncServerCutText;
-            vnc.ViewOnly = viewOnly;
-
+            this.InitializeConnect(viewOnly);
             passwordPending = await vnc.ConnectAsync(host, display, VncPort, viewOnly, ct);
+            await this.ContinueConnectAsync(scaled, ct);
+        }
 
-            SetScalingMode(scaled);
+        public async Task ConnectAsync(Stream stream, bool viewOnly, bool scaled, CancellationToken ct = default)
+        {
+            this.InitializeConnect(viewOnly);
+            passwordPending = await vnc.ConnectAsync(stream, viewOnly, ct);
+            await this.ContinueConnectAsync(scaled, ct);
+        }
 
-            if (passwordPending)
+        private async Task ContinueConnectAsync(bool scaled, CancellationToken ct)
+        {
+            this.SetScalingMode(scaled);
+
+            if (this.passwordPending)
             {
                 // Server needs a password, so call which ever method is refered to by the GetPassword delegate.
-                var password = GetPassword();
+                var password = this.GetPassword();
 
                 if (password != null)
-                    await Authenticate(password, ct);
+                    await this.Authenticate(password, ct);
             }
             else
             {
                 // No password needed, so go ahead and Initialize here
-                await Initialize(ct);
+                await this.Initialize(ct);
             }
+        }
+
+        private void InitializeConnect(bool viewOnly)
+        {
+            // TODO: Should this be done asynchronously so as not to block the UI?  Since an event 
+            // indicates the end of the connection, maybe that would be a better design.
+            this.InsureConnection(false);
+
+            // Start protocol-level handling and determine whether a password is needed
+            this.vnc = new VncClient();
+            this.vnc.ConnectionLost += this.VncClientConnectionLost;
+            this.vnc.ServerCutText += this.VncServerCutText;
+            this.vnc.ViewOnly = viewOnly;
         }
 
         /// <summary>

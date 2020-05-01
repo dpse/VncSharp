@@ -28,6 +28,7 @@ using System.Windows.Forms;
 
 namespace VncSharp
 {
+    using System.IO;
     using System.Threading.Tasks;
 
     /// <summary>
@@ -114,6 +115,11 @@ namespace VncSharp
             return ConnectAsync(host, display, port, viewOnly).Result;
         }
 
+        public bool Connect(Stream stream, bool viewOnly)
+        {
+            return ConnectAsync(stream, viewOnly).Result;
+        }
+
 		/// <summary>
 		/// Connect to a VNC Host and determine which type of Authentication it uses. If the host uses Password Authentication, a call to Authenticate() will be required.
 		/// </summary>
@@ -132,61 +138,28 @@ namespace VncSharp
 			if (display < 0) throw new ArgumentOutOfRangeException(nameof(display), display, "Display number must be non-negative.");
 			port += display;
 			
-			rfb = new RfbProtocol();
+			this.CreateRfbProtocol(viewOnly);
 
-			viewOnlyMode = viewOnly;
-			if (viewOnly) {
-				inputPolicy = new VncViewInputPolicy(rfb);
-			} else {
-				inputPolicy = new VncDefaultInputPolicy(rfb);
-			}
+            // Connect and determine version of server, and set client protocol version to match			
+			try
+            {
+                await rfb.ConnectAsync(host, port, ct);
+                return await this.ContinueConnectAsync(ct);
+            } catch (Exception e) {
+				throw new VncProtocolException("Unable to connect to the server. Error was: " + e.Message, e);
+			}			
+		}
+
+        public async Task<bool> ConnectAsync(Stream stream, bool viewOnly, CancellationToken ct = default)
+		{
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+			
+			this.CreateRfbProtocol(viewOnly);
 			
 			// Connect and determine version of server, and set client protocol version to match			
 			try {
-				await rfb.ConnectAsync(host, port, ct);
-				await rfb.ReadProtocolVersion(ct);
-
-				// Handle possible repeater connection
-				if (rfb.ServerVersion == 0.0) {
-					await rfb.WriteProxyAddress(ct);
-					// Now we are connected to the real server; read the protocol version of the 
-					// server
-					await rfb.ReadProtocolVersion(ct);
-					// Resume normal handshake and protocol
-				}
-					
-				await rfb.WriteProtocolVersion(ct);
-
-				// Figure out which type of authentication the server uses
-				var types = await rfb.ReadSecurityTypes(ct);
-				
-				// Based on what the server sends back in the way of supported Security Types, one of
-				// two things will need to be done: either the server will reject the connection (i.e., type = 0),
-				// or a list of supported types will be sent, of which we need to choose and use one.
-			    if (types.Length <= 0)
-                    // Something is wrong, since we should have gotten at least 1 Security Type
-                    throw new VncProtocolException(
-			            "Protocol Error Connecting to Server. The Server didn't send any Security Types during the initial handshake.");
-			    if (types[0] == 0) {
-			        // The server is not able (or willing) to accept the connection.
-			        // A message follows indicating why the connection was dropped.
-			        throw new VncProtocolException("Connection Failed. The server rejected the connection for the following reason: " + rfb.ReadSecurityFailureReason());
-			    }
-			    securityType = GetSupportedSecurityType(types);
-				Debug.Assert(securityType > 0, "Unknown Security Type(s)", "The server sent one or more unknown Security Types.");
-						
-			    await rfb.WriteSecurityType(securityType, ct);
-						
-			    // Protocol 3.8 states that a SecurityResult is still sent when using NONE (see 6.2.1)
-			    if (rfb.ServerVersion != 3.8f || securityType != 1) return securityType > 1;
-			    if (await rfb.ReadSecurityResult(ct) > 0) {
-			        // For some reason, the server is not accepting the connection.  Get the
-			        // reason and throw an exception
-			        throw new VncProtocolException("Unable to Connecto to the Server. The Server rejected the connection for the following reason: " + rfb.ReadSecurityFailureReason());
-			    }
-
-			    return securityType > 1;
-			    
+				rfb.Connect(stream);
+                return await this.ContinueConnectAsync(ct);
 			} catch (Exception e) {
 				throw new VncProtocolException("Unable to connect to the server. Error was: " + e.Message, e);
 			}			
@@ -222,6 +195,75 @@ namespace VncSharp
 		{
 			return ConnectAsync(host, display, 5900);
 		}
+
+        private async Task<bool> ContinueConnectAsync(CancellationToken ct)
+        {
+            await this.rfb.ReadProtocolVersion(ct);
+
+            // Handle possible repeater connection
+            if (this.rfb.ServerVersion == 0.0)
+            {
+                await this.rfb.WriteProxyAddress(ct);
+                // Now we are connected to the real server; read the protocol version of the 
+                // server
+                await this.rfb.ReadProtocolVersion(ct);
+                // Resume normal handshake and protocol
+            }
+
+            await this.rfb.WriteProtocolVersion(ct);
+
+            // Figure out which type of authentication the server uses
+            var types = await this.rfb.ReadSecurityTypes(ct);
+
+            // Based on what the server sends back in the way of supported Security Types, one of
+            // two things will need to be done: either the server will reject the connection (i.e., type = 0),
+            // or a list of supported types will be sent, of which we need to choose and use one.
+            if (types.Length <= 0)
+                // Something is wrong, since we should have gotten at least 1 Security Type
+                throw new VncProtocolException(
+                    "Protocol Error Connecting to Server. The Server didn't send any Security Types during the initial handshake.");
+            if (types[0] == 0)
+            {
+                // The server is not able (or willing) to accept the connection.
+                // A message follows indicating why the connection was dropped.
+                throw new VncProtocolException(
+                    "Connection Failed. The server rejected the connection for the following reason: "
+                    + this.rfb.ReadSecurityFailureReason(ct));
+            }
+
+            this.securityType = this.GetSupportedSecurityType(types);
+            Debug.Assert(this.securityType > 0, "Unknown Security Type(s)", "The server sent one or more unknown Security Types.");
+
+            await this.rfb.WriteSecurityType(this.securityType, ct);
+
+            // Protocol 3.8 states that a SecurityResult is still sent when using NONE (see 6.2.1)
+            if (this.rfb.ServerVersion != 3.8f || this.securityType != 1) return this.securityType > 1;
+            if (await this.rfb.ReadSecurityResult(ct) > 0)
+            {
+                // For some reason, the server is not accepting the connection.  Get the
+                // reason and throw an exception
+                throw new VncProtocolException(
+                    "Unable to Connecto to the Server. The Server rejected the connection for the following reason: "
+                    + this.rfb.ReadSecurityFailureReason(ct));
+            }
+
+            return this.securityType > 1;
+        }
+
+        private void CreateRfbProtocol(bool viewOnly)
+        {
+            this.rfb = new RfbProtocol();
+
+            this.viewOnlyMode = viewOnly;
+            if (viewOnly)
+            {
+                this.inputPolicy = new VncViewInputPolicy(this.rfb);
+            }
+            else
+            {
+                this.inputPolicy = new VncDefaultInputPolicy(this.rfb);
+            }
+        }
 
 		/// <summary>
 		/// Examines a list of Security Types supported by a VNC Server and chooses one that the Client supports.  See 6.1.2 of the RFB Protocol document v. 3.8.

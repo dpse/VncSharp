@@ -176,6 +176,13 @@ namespace VncSharp
 			await tcp.ConnectAsync(host, port, ct);
 			stream = tcp.GetStream();
 
+            Connect(this.stream);
+        }
+
+        public void Connect(Stream stream)
+        {
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+
 			stream.ReadTimeout = RECEIVE_TIMEOUT; // set read timeout to (15s default)
 			stream.WriteTimeout = SEND_TIMEOUT;// set write timeout to (15s default)
 
@@ -185,7 +192,7 @@ namespace VncSharp
 			Reader = new BigEndianBinaryReader(stream);
 			writer = new BigEndianBinaryWriter(stream);
 			ZrleReader = new ZRLECompressedReader(stream);
-		}
+        }
 
 		/// <summary>
 		/// Closes the connection to the remote host.
