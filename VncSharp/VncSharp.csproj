@@ -50,6 +50,7 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Extensions.cs" />
     <Compile Include="KeyboardHook.cs" />
     <Compile Include="NativeMethods.cs" />
     <Compile Include="Overby.Extensions.AsyncBinaryReaderWriter\AsyncBinaryReader.cs" />

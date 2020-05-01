@@ -35,6 +35,7 @@ using static System.Reflection.Assembly;
 
 namespace VncSharp
 {
+    using System.Threading;
     using System.Threading.Tasks;
 
     /// <summary>
@@ -399,7 +400,7 @@ namespace VncSharp
         /// <exception cref="System.ArgumentNullException">Thrown if host is null.</exception>
         /// <exception cref="System.ArgumentOutOfRangeException">Thrown if display is negative.</exception>
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is already Connected.  See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
-        public async Task ConnectAsync(string host, int display, bool viewOnly, bool scaled)
+        public async Task ConnectAsync(string host, int display, bool viewOnly, bool scaled, CancellationToken ct = default)
         {
             // TODO: Should this be done asynchronously so as not to block the UI?  Since an event 
             // indicates the end of the connection, maybe that would be a better design.
@@ -416,7 +417,7 @@ namespace VncSharp
             vnc.ServerCutText += VncServerCutText;
             vnc.ViewOnly = viewOnly;
 
-            passwordPending = await vnc.ConnectAsync(host, display, VncPort, viewOnly);
+            passwordPending = await vnc.ConnectAsync(host, display, VncPort, viewOnly, ct);
 
             SetScalingMode(scaled);
 
@@ -426,12 +427,12 @@ namespace VncSharp
                 var password = GetPassword();
 
                 if (password != null)
-                    await Authenticate(password);
+                    await Authenticate(password, ct);
             }
             else
             {
                 // No password needed, so go ahead and Initialize here
-                await Initialize();
+                await Initialize(ct);
             }
         }
 
@@ -441,7 +442,7 @@ namespace VncSharp
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is already Connected.  See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
         /// <exception cref="System.NullReferenceException">Thrown if the password is null.</exception>
         /// <param name="password">The user's password.</param>
-        private async Task Authenticate(string password)
+        private async Task Authenticate(string password, CancellationToken ct = default)
         {
             InsureConnection(false);
             if (!passwordPending)
@@ -450,8 +451,8 @@ namespace VncSharp
             if (password == null) throw new NullReferenceException("password");
 
             passwordPending = false; // repeated calls to Authenticate should fail.
-            if (await vnc.Authenticate(password))
-                await Initialize();
+            if (await vnc.Authenticate(password, ct))
+                await Initialize(ct);
             else
                 OnConnectionLost();
         }
@@ -521,11 +522,11 @@ namespace VncSharp
         /// After protocol-level initialization and connecting is complete, the local GUI objects have to be set-up, and requests for updates to the remote host begun.
         /// </summary>
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is already in the Connected state.  See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>		
-        private async Task Initialize()
+        private async Task Initialize(CancellationToken ct = default)
         {
             // Finish protocol handshake with host now that authentication is done.
             InsureConnection(false);
-            await vnc.Initialize(bitsPerPixel, depth);
+            await vnc.Initialize(bitsPerPixel, depth, ct);
             SetState(RuntimeState.Connected);
 
             // Create a buffer on which updated rectangles will be drawn and draw a "please wait..." 
@@ -633,15 +634,21 @@ namespace VncSharp
         /// Stops the remote host from sending further updates and disconnects.
         /// </summary>
         /// <exception cref="System.InvalidOperationException">Thrown if the RemoteDesktop control is not already in the Connected state. See <see cref="VncSharp.RemoteDesktop.IsConnected" />.</exception>
-        public async Task DisconnectAsync()
+        public async Task DisconnectAsync(CancellationToken ct = default)
         {
             InsureConnection(true);
             vnc.ConnectionLost -= VncClientConnectionLost;
             vnc.ServerCutText -= VncServerCutText;
-            await vnc.Disconnect();
-            SetState(RuntimeState.Disconnected);
-            OnConnectionLost();
-            Invalidate();
+            try
+            {
+                await vnc.Disconnect(ct);
+            }
+            finally
+            {
+                SetState(RuntimeState.Disconnected);
+                OnConnectionLost();
+                Invalidate();
+            }
         }
 
         /// <summary>

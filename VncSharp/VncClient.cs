@@ -122,7 +122,7 @@ namespace VncSharp
 		/// <param name="port">The Port number used by the Host, usually 5900.</param>
 		/// <param name="viewOnly">True if mouse/keyboard events are to be ignored.</param>
 		/// <returns>Returns True if the VNC Host requires a Password to be sent after Connect() is called, otherwise False.</returns>
-		public async Task<bool> ConnectAsync(string host, int display, int port, bool viewOnly)
+		public async Task<bool> ConnectAsync(string host, int display, int port, bool viewOnly, CancellationToken ct = default)
 		{
 			if (host == null) throw new ArgumentNullException(nameof(host));
 
@@ -143,22 +143,22 @@ namespace VncSharp
 			
 			// Connect and determine version of server, and set client protocol version to match			
 			try {
-				await rfb.ConnectAsync(host, port);
-				await rfb.ReadProtocolVersion();
+				await rfb.ConnectAsync(host, port, ct);
+				await rfb.ReadProtocolVersion(ct);
 
 				// Handle possible repeater connection
 				if (rfb.ServerVersion == 0.0) {
-					await rfb.WriteProxyAddress();
+					await rfb.WriteProxyAddress(ct);
 					// Now we are connected to the real server; read the protocol version of the 
 					// server
-					await rfb.ReadProtocolVersion();
+					await rfb.ReadProtocolVersion(ct);
 					// Resume normal handshake and protocol
 				}
 					
-				await rfb.WriteProtocolVersion();
+				await rfb.WriteProtocolVersion(ct);
 
 				// Figure out which type of authentication the server uses
-				var types = await rfb.ReadSecurityTypes();
+				var types = await rfb.ReadSecurityTypes(ct);
 				
 				// Based on what the server sends back in the way of supported Security Types, one of
 				// two things will need to be done: either the server will reject the connection (i.e., type = 0),
@@ -175,11 +175,11 @@ namespace VncSharp
 			    securityType = GetSupportedSecurityType(types);
 				Debug.Assert(securityType > 0, "Unknown Security Type(s)", "The server sent one or more unknown Security Types.");
 						
-			    await rfb.WriteSecurityType(securityType);
+			    await rfb.WriteSecurityType(securityType, ct);
 						
 			    // Protocol 3.8 states that a SecurityResult is still sent when using NONE (see 6.2.1)
 			    if (rfb.ServerVersion != 3.8f || securityType != 1) return securityType > 1;
-			    if (await rfb.ReadSecurityResult() > 0) {
+			    if (await rfb.ReadSecurityResult(ct) > 0) {
 			        // For some reason, the server is not accepting the connection.  Get the
 			        // reason and throw an exception
 			        throw new VncProtocolException("Unable to Connecto to the Server. The Server rejected the connection for the following reason: " + rfb.ReadSecurityFailureReason());
@@ -251,26 +251,26 @@ namespace VncSharp
 		/// </summary>
 		/// <param name="password">The password to use.</param>
 		/// <returns>Returns True if Authentication worked, otherwise False.</returns>
-		public async Task<bool> Authenticate(string password)
+		public async Task<bool> Authenticate(string password, CancellationToken ct = default)
 		{
 			if (password == null) throw new ArgumentNullException(nameof(password));
 			
 			// If new Security Types are supported in future, add the code here.  For now, only 
 			// VNC Authentication is supported.
 			if (securityType == 2) {
-			    await PerformVncAuthentication(password);
+			    await PerformVncAuthentication(password, ct);
 			} else {
 				throw new NotSupportedException("Unable to Authenticate with Server. The Server uses an Authentication scheme unknown to the client.");
 			}
 			
-			if (await rfb.ReadSecurityResult() == 0) {
+			if (await rfb.ReadSecurityResult(ct) == 0) {
 				return true;
 			}
 		    // Authentication failed, and if the server is using Protocol version 3.8, a 
 		    // plain text message follows indicating why the error happend.  I'm not 
 		    // currently using this message, but it is read here to clean out the stream.
 		    // In earlier versions of the protocol, the server will just drop the connection.
-		    if (rfb.ServerVersion == 3.8) await rfb.ReadSecurityFailureReason();
+		    if (rfb.ServerVersion == 3.8) await rfb.ReadSecurityFailureReason(ct);
 		    rfb.Close();	// TODO: Is this the right place for this???
 		    return false;
 		}
@@ -279,10 +279,10 @@ namespace VncSharp
 		/// Performs VNC Authentication using VNC DES encryption.  See the RFB Protocol doc 6.2.2.
 		/// </summary>
 		/// <param name="password">A string containing the user's password in clear text format.</param>
-		private async Task PerformVncAuthentication(string password)
+		private async Task PerformVncAuthentication(string password, CancellationToken ct = default)
 		{
-			var challenge = await rfb.ReadSecurityChallenge();
-			await rfb.WriteSecurityResponse(EncryptChallenge(password, challenge));
+			var challenge = await rfb.ReadSecurityChallenge(ct);
+			await rfb.WriteSecurityResponse(EncryptChallenge(password, challenge), ct);
 		}
 
 		/// <summary>
@@ -326,11 +326,11 @@ namespace VncSharp
 		/// <summary>
 		/// Finish setting-up protocol with VNC Host.  Should be called after Connect and Authenticate (if password required).
 		/// </summary>
-		public async Task Initialize(int bitsPerPixel, int depth)
+		public async Task Initialize(int bitsPerPixel, int depth, CancellationToken ct = default)
 		{
 			// Finish initializing protocol with host
-			await rfb.WriteClientInitialisation(true);  // Allow the desktop to be shared
-			Framebuffer = await rfb.ReadServerInit(bitsPerPixel, depth);
+			await rfb.WriteClientInitialisation(true, ct);  // Allow the desktop to be shared
+			Framebuffer = await rfb.ReadServerInit(bitsPerPixel, depth, ct);
 
 			await rfb.WriteSetEncodings(new uint[] {	RfbProtocol.ZRLE_ENCODING,
 			                                    RfbProtocol.HEXTILE_ENCODING, 
@@ -339,7 +339,7 @@ namespace VncSharp
 												RfbProtocol.COPYRECT_ENCODING,
 												RfbProtocol.RAW_ENCODING });
 
-			await rfb.WriteSetPixelFormat(Framebuffer);	// set the required ramebuffer format
+			await rfb.WriteSetPixelFormat(Framebuffer, ct);	// set the required ramebuffer format
             
 			// Create an EncodedRectangleFactory so that EncodedRectangles can be built according to set pixel layout
 			factory = new EncodedRectangleFactory(rfb, Framebuffer);
@@ -375,7 +375,7 @@ namespace VncSharp
 		/// <summary>
 		/// Stops sending requests for updates and disconnects from the remote host.  You must call Connect() again if you wish to re-establish a connection.
 		/// </summary>
-		public async Task Disconnect()
+		public async Task Disconnect(CancellationToken ct = default)
 		{
 			// Stop the worker thread.
 			if (done != null)
@@ -384,7 +384,7 @@ namespace VncSharp
 			// BUG FIX: Simon.Phillips@warwick.ac.uk for UltraVNC disconnect issue
 			// Request a tiny screen update to flush the blocking read
 			try {
-				await rfb.WriteFramebufferUpdateRequest(0, 0, 1, 1, false);
+				await rfb.WriteFramebufferUpdateRequest(0, 0, 1, 1, false, ct);
 			} catch {
 				// this may not work, as Disconnect can get called in response to the
 				// VncClient raising a ConnectionLost event (e.g., the remote host died).

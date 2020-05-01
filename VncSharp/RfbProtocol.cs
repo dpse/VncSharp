@@ -163,7 +163,7 @@ namespace VncSharp
 		/// </summary>
 		/// <param name="host">The IP Address or Host Name of the VNC Host.</param>
 		/// <param name="port">The Port number on which to connect.  Usually this will be 5900, except in the case that the VNC Host is running on a different Display, in which case the Display number should be added to 5900 to determine the correct port.</param>
-		public async Task ConnectAsync(string host, int port)
+		public async Task ConnectAsync(string host, int port, CancellationToken ct = default)
 		{
 			if (host == null) throw new ArgumentNullException(nameof(host));
 
@@ -173,7 +173,7 @@ namespace VncSharp
 
 			tcp.ReceiveTimeout = RECEIVE_TIMEOUT; // set receive timeout (15s default)
 			tcp.SendTimeout = SEND_TIMEOUT;    // set send timeout to (15s default)
-			await tcp.ConnectAsync(host, port);
+			await tcp.ConnectAsync(host, port, ct);
 			stream = tcp.GetStream();
 
 			stream.ReadTimeout = RECEIVE_TIMEOUT; // set read timeout to (15s default)
@@ -206,9 +206,9 @@ namespace VncSharp
 		/// Reads VNC Host Protocol Version message (see RFB Doc v. 3.8 section 6.1.1)
 		/// </summary>
 		/// <exception cref="NotSupportedException">Thrown if the version of the host is not known or supported.</exception>
-		public async Task ReadProtocolVersion()
+		public async Task ReadProtocolVersion(CancellationToken ct = default)
 		{
-			var b = await Reader.ReadBytesAsync(12);
+			var b = await Reader.ReadBytesAsync(12, ct);
 			string a = "";
 			string s = "";
 			for (int x = 0; x < 12; x++)
@@ -293,45 +293,45 @@ namespace VncSharp
 		/// <summary>
 		/// Send the Protocol Version supported by the client.  Will be highest supported by server (see RFB Doc v. 3.8 section 6.1.1).
 		/// </summary>
-		public async Task WriteProtocolVersion()
+		public async Task WriteProtocolVersion(CancellationToken ct = default)
 		{
 			// We will use which ever version the server understands, be it 3.3, 3.7, or 3.8.
 			Debug.Assert(verMinor == 3 || verMinor == 7 || verMinor == 8, "Wrong Protocol Version!",
 				$"Protocol Version should be 3.3, 3.7, or 3.8 but is {verMajor}.{verMinor}");
 
-			await writer.WriteAsync(GetBytes($"RFB 003.00{verMinor}\n"));
-			await writer.FlushAsync();
+			await writer.WriteAsync(GetBytes($"RFB 003.00{verMinor}\n"), ct);
+			await writer.FlushAsync(ct);
 		}
 
 		/// <summary>
 		/// Send the Target Proxy address, needs to be 250 bytes
 		/// </summary>
-		public async Task WriteProxyAddress()
+		public async Task WriteProxyAddress(CancellationToken ct = default)
 		{
 			var proxyMessage = new byte[250];
 			GetBytes("ID:" + ProxyID + "\n").CopyTo(proxyMessage, 0);
-			await writer.WriteAsync(proxyMessage);
-			await writer.FlushAsync();
+			await writer.WriteAsync(proxyMessage, ct);
+			await writer.FlushAsync(ct);
 		}
 
 		/// <summary>
 		/// Determine the type(s) of authentication that the server supports. See RFB Doc v. 3.8 section 6.1.2.
 		/// </summary>
 		/// <returns>An array of bytes containing the supported Security Type(s) of the server.</returns>
-		public async Task<byte[]> ReadSecurityTypes()
+		public async Task<byte[]> ReadSecurityTypes(CancellationToken ct = default)
 		{
 			// Read and return the types of security supported by the server (see protocol doc 6.1.2)
 			byte[] types;
 			
 			// Protocol Version 3.7 onward supports multiple security types, while 3.3 only 1
 			if (verMinor == 3) {
-				types = new[] { (byte) await Reader.ReadUInt32Async() };
+				types = new[] { (byte) await Reader.ReadUInt32Async(ct) };
 			} else {
-				var num = await Reader.ReadByteAsync();
+				var num = await Reader.ReadByteAsync(ct);
 				types = new byte[num];
 				
 				for (var i = 0; i < num; ++i) {
-					types[i] = await Reader.ReadByteAsync();
+					types[i] = await Reader.ReadByteAsync(ct);
 				}
 			}
 			return types;
@@ -341,24 +341,24 @@ namespace VncSharp
 		/// If the server has rejected the connection during Authentication, a reason is given. See RFB Doc v. 3.8 section 6.1.2.
 		/// </summary>
 		/// <returns>Returns a string containing the reason for the server rejecting the connection.</returns>
-		public async Task<string> ReadSecurityFailureReason()
+		public async Task<string> ReadSecurityFailureReason(CancellationToken ct = default)
 		{
-			var length = (int) await Reader.ReadUInt32Async();
-			return GetString(await Reader.ReadBytesAsync(length));
+			var length = (int) await Reader.ReadUInt32Async(ct);
+			return GetString(await Reader.ReadBytesAsync(length, ct));
 		}
 
 		/// <summary>
 		/// Indicate to the server which type of authentication will be used. See RFB Doc v. 3.8 section 6.1.2.
 		/// </summary>
 		/// <param name="type">The type of Authentication to be used, 1 (None) or 2 (VNC Authentication).</param>
-		public async Task WriteSecurityType(byte type)
+		public async Task WriteSecurityType(byte type, CancellationToken ct = default)
 		{
 			Debug.Assert(type >= 1, "Wrong Security Type", "The Security Type must be one that requires authentication.");
 			
 			// Only bother writing this byte if the version of the server is 3.7
 			if (verMinor < 7) return;
-			await writer.WriteAsync(type);
-			await writer.FlushAsync();
+			await writer.WriteAsync(type, ct);
+			await writer.FlushAsync(ct);
 		}
 
 		/// <summary>
@@ -366,19 +366,19 @@ namespace VncSharp
 		/// mechanism is used to authenticate the user. See RFB Doc v. 3.8 section 6.1.2 and 6.2.2.
 		/// </summary>
 		/// <returns>Returns the 16 byte Challenge sent by the server.</returns>
-		public Task<byte[]> ReadSecurityChallenge()
+		public Task<byte[]> ReadSecurityChallenge(CancellationToken ct = default)
 		{
-			return Reader.ReadBytesAsync(16);
+			return Reader.ReadBytesAsync(16, ct);
 		}
 
 		/// <summary>
 		/// Sends the encrypted Response back to the server. See RFB Doc v. 3.8 section 6.1.2.
 		/// </summary>
 		/// <param name="response">The DES password encrypted challege sent by the server.</param>
-		public async Task WriteSecurityResponse(byte[] response)
+		public async Task WriteSecurityResponse(byte[] response, CancellationToken ct = default)
 		{
-			await writer.WriteAsync(response, 0, response.Length);
-			await writer.FlushAsync();
+			await writer.WriteAsync(response, 0, response.Length, ct);
+			await writer.FlushAsync(ct);
 		}
 
 		/// <summary>
@@ -386,34 +386,34 @@ namespace VncSharp
 		/// sends a status code to indicate whether authentication worked. See RFB Doc v. 3.8 section 6.1.3.
 		/// </summary>
 		/// <returns>An integer indicating the status of authentication: 0 = OK; 1 = Failed; 2 = Too Many (deprecated).</returns>
-		public Task<uint> ReadSecurityResult()
+		public Task<uint> ReadSecurityResult(CancellationToken ct = default)
 		{
-			return Reader.ReadUInt32Async();
+			return Reader.ReadUInt32Async(ct);
 		}
 
 		/// <summary>
 		/// Sends an Initialisation message to the server. See RFB Doc v. 3.8 section 6.1.4.
 		/// </summary>
 		/// <param name="shared">True if the server should allow other clients to connect, otherwise False.</param>
-		public async Task WriteClientInitialisation(bool shared)
+		public async Task WriteClientInitialisation(bool shared, CancellationToken ct = default)
 		{
 			// Non-zero if TRUE, zero if FALSE
-			await writer.WriteAsync((byte)(shared ? 1 : 0));
-			await writer.FlushAsync();
+			await writer.WriteAsync((byte)(shared ? 1 : 0), ct);
+			await writer.FlushAsync(ct);
 		}
 		
 		/// <summary>
 		/// Reads the server's Initialization message, specifically the remote Framebuffer's properties. See RFB Doc v. 3.8 section 6.1.5.
 		/// </summary>
 		/// <returns>Returns a Framebuffer object representing the geometry and properties of the remote host.</returns>
-		public async Task< Framebuffer> ReadServerInit(int bitsPerPixel, int depth)
+		public async Task< Framebuffer> ReadServerInit(int bitsPerPixel, int depth, CancellationToken ct = default)
 		{
-			int w = await Reader.ReadUInt16Async();
-			int h = await Reader.ReadUInt16Async();
-			var buffer = Framebuffer.FromPixelFormat(await Reader.ReadBytesAsync(16), w, h, bitsPerPixel, depth);
-			var length = (int) await Reader.ReadUInt32Async();
+			int w = await Reader.ReadUInt16Async(ct);
+			int h = await Reader.ReadUInt16Async(ct);
+			var buffer = Framebuffer.FromPixelFormat(await Reader.ReadBytesAsync(16, ct), w, h, bitsPerPixel, depth);
+			var length = (int) await Reader.ReadUInt32Async(ct);
 
-			buffer.DesktopName = GetString(await Reader.ReadBytesAsync(length));
+			buffer.DesktopName = GetString(await Reader.ReadBytesAsync(length, ct));
 			
 			return buffer;
 		}
@@ -422,7 +422,7 @@ namespace VncSharp
 		/// Sends the format to be used by the server when sending Framebuffer Updates. See RFB Doc v. 3.8 section 6.3.1.
 		/// </summary>
 		/// <param name="buffer">A Framebuffer telling the server how to encode pixel data. Typically this will be the same one sent by the server during initialization.</param>
-		public async Task WriteSetPixelFormat(Framebuffer buffer)
+		public async Task WriteSetPixelFormat(Framebuffer buffer, CancellationToken ct = default)
 		{
 			byte[] buff = new byte[20];
 
@@ -432,8 +432,8 @@ namespace VncSharp
 			buff[2] = 0x00;
 			buff[3] = 0x00;
 			buffer.ToPixelFormat().CopyTo(buff, 4);		// 16-byte Pixel Format
-			await writer.WriteAsync(buff);
-			await writer.FlushAsync();
+			await writer.WriteAsync(buff, ct);
+			await writer.FlushAsync(ct);
 		}
 
 		/// <summary>
@@ -465,7 +465,7 @@ namespace VncSharp
 		/// <param name="width">The width of the area to be updated.</param>
 		/// <param name="height">The height of the area to be updated.</param>
 		/// <param name="incremental">Indicates whether only changes to the client's data should be sent or the entire desktop.</param>
-		public async Task WriteFramebufferUpdateRequest(ushort x, ushort y, ushort width, ushort height, bool incremental)
+		public async Task WriteFramebufferUpdateRequest(ushort x, ushort y, ushort width, ushort height, bool incremental, CancellationToken ct = default)
 		{
 			byte[] buff = new byte[10];
 			buff[0] = FRAMEBUFFER_UPDATE_REQUEST;
@@ -474,8 +474,8 @@ namespace VncSharp
 			BitConverter.GetBytes((ushort)y).Reverse().ToArray().CopyTo(buff, 4);
 			BitConverter.GetBytes((ushort)width).Reverse().ToArray().CopyTo(buff, 6);
 			BitConverter.GetBytes((ushort)height).Reverse().ToArray().CopyTo(buff, 8);
-			await writer.WriteAsync(buff);
-			await writer.FlushAsync();
+			await writer.WriteAsync(buff, ct);
+			await writer.FlushAsync(ct);
 		}
 
 		/// <summary>
