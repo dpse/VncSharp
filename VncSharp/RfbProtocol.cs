@@ -202,8 +202,8 @@ namespace VncSharp
 			try {
 				writer.Close();
 				Reader.Close();
-				stream.Close();
-				tcp.Close();
+				stream?.Close();
+				tcp?.Close();
 			} catch (Exception ex) {
 				Debug.Fail(ex.Message);
 			}
