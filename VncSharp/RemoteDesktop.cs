@@ -576,6 +576,8 @@ namespace VncSharp
             //KeyboardHook.RequestKeyNotification(this.Handle, NativeMethods.VK_SNAPSHOT, true);
         }
 
+        public bool UseVncCursor { get; set; } = true;
+
         private void SetState(RuntimeState newState)
         {
             state = newState;
@@ -586,7 +588,7 @@ namespace VncSharp
             {
                 case RuntimeState.Connected:
                     // Change the cursor to the "vnc" custor--a see-through dot
-                    Cursor = new Cursor(GetType(), "Resources.vnccursor.cur");
+                    Cursor = this.UseVncCursor ? new Cursor(GetType(), "Resources.vnccursor.cur") : Cursors.Default;
                     break;
                 // All other states should use the normal cursor.
                 //case RuntimeState.Disconnected:
