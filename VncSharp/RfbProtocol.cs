@@ -173,7 +173,7 @@ namespace VncSharp
 
 			tcp.ReceiveTimeout = RECEIVE_TIMEOUT; // set receive timeout (15s default)
 			tcp.SendTimeout = SEND_TIMEOUT;    // set send timeout to (15s default)
-			await tcp.ConnectAsync(host, port, ct);
+			await tcp.ConnectAsync(host, port, ct).ConfigureAwait(false);
 			stream = tcp.GetStream();
 
             Connect(this.stream);
@@ -215,7 +215,7 @@ namespace VncSharp
 		/// <exception cref="NotSupportedException">Thrown if the version of the host is not known or supported.</exception>
 		public async Task ReadProtocolVersion(CancellationToken ct = default)
 		{
-			var b = await Reader.ReadBytesAsync(12, ct);
+			var b = await Reader.ReadBytesAsync(12, ct).ConfigureAwait(false);
 			string a = "";
 			string s = "";
 			for (int x = 0; x < 12; x++)
@@ -306,8 +306,8 @@ namespace VncSharp
 			Debug.Assert(verMinor == 3 || verMinor == 7 || verMinor == 8, "Wrong Protocol Version!",
 				$"Protocol Version should be 3.3, 3.7, or 3.8 but is {verMajor}.{verMinor}");
 
-			await writer.WriteAsync(GetBytes($"RFB 003.00{verMinor}\n"), ct);
-			await writer.FlushAsync(ct);
+			await writer.WriteAsync(GetBytes($"RFB 003.00{verMinor}\n"), ct).ConfigureAwait(false);
+			await writer.FlushAsync(ct).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -317,8 +317,8 @@ namespace VncSharp
 		{
 			var proxyMessage = new byte[250];
 			GetBytes("ID:" + ProxyID + "\n").CopyTo(proxyMessage, 0);
-			await writer.WriteAsync(proxyMessage, ct);
-			await writer.FlushAsync(ct);
+			await writer.WriteAsync(proxyMessage, ct).ConfigureAwait(false);
+			await writer.FlushAsync(ct).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -332,13 +332,13 @@ namespace VncSharp
 			
 			// Protocol Version 3.7 onward supports multiple security types, while 3.3 only 1
 			if (verMinor == 3) {
-				types = new[] { (byte) await Reader.ReadUInt32Async(ct) };
+				types = new[] { (byte) await Reader.ReadUInt32Async(ct).ConfigureAwait(false) };
 			} else {
-				var num = await Reader.ReadByteAsync(ct);
+				var num = await Reader.ReadByteAsync(ct).ConfigureAwait(false);
 				types = new byte[num];
 				
 				for (var i = 0; i < num; ++i) {
-					types[i] = await Reader.ReadByteAsync(ct);
+					types[i] = await Reader.ReadByteAsync(ct).ConfigureAwait(false);
 				}
 			}
 			return types;
@@ -350,8 +350,8 @@ namespace VncSharp
 		/// <returns>Returns a string containing the reason for the server rejecting the connection.</returns>
 		public async Task<string> ReadSecurityFailureReason(CancellationToken ct = default)
 		{
-			var length = (int) await Reader.ReadUInt32Async(ct);
-			return GetString(await Reader.ReadBytesAsync(length, ct));
+			var length = (int) await Reader.ReadUInt32Async(ct).ConfigureAwait(false);
+			return GetString(await Reader.ReadBytesAsync(length, ct).ConfigureAwait(false));
 		}
 
 		/// <summary>
@@ -364,8 +364,8 @@ namespace VncSharp
 			
 			// Only bother writing this byte if the version of the server is 3.7
 			if (verMinor < 7) return;
-			await writer.WriteAsync(type, ct);
-			await writer.FlushAsync(ct);
+			await writer.WriteAsync(type, ct).ConfigureAwait(false);
+			await writer.FlushAsync(ct).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -384,8 +384,8 @@ namespace VncSharp
 		/// <param name="response">The DES password encrypted challege sent by the server.</param>
 		public async Task WriteSecurityResponse(byte[] response, CancellationToken ct = default)
 		{
-			await writer.WriteAsync(response, 0, response.Length, ct);
-			await writer.FlushAsync(ct);
+			await writer.WriteAsync(response, 0, response.Length, ct).ConfigureAwait(false);
+			await writer.FlushAsync(ct).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -405,8 +405,8 @@ namespace VncSharp
 		public async Task WriteClientInitialisation(bool shared, CancellationToken ct = default)
 		{
 			// Non-zero if TRUE, zero if FALSE
-			await writer.WriteAsync((byte)(shared ? 1 : 0), ct);
-			await writer.FlushAsync(ct);
+			await writer.WriteAsync((byte)(shared ? 1 : 0), ct).ConfigureAwait(false);
+			await writer.FlushAsync(ct).ConfigureAwait(false);
 		}
 		
 		/// <summary>
@@ -415,12 +415,12 @@ namespace VncSharp
 		/// <returns>Returns a Framebuffer object representing the geometry and properties of the remote host.</returns>
 		public async Task< Framebuffer> ReadServerInit(int bitsPerPixel, int depth, CancellationToken ct = default)
 		{
-			int w = await Reader.ReadUInt16Async(ct);
-			int h = await Reader.ReadUInt16Async(ct);
-			var buffer = Framebuffer.FromPixelFormat(await Reader.ReadBytesAsync(16, ct), w, h, bitsPerPixel, depth);
-			var length = (int) await Reader.ReadUInt32Async(ct);
+			int w = await Reader.ReadUInt16Async(ct).ConfigureAwait(false);
+			int h = await Reader.ReadUInt16Async(ct).ConfigureAwait(false);
+			var buffer = Framebuffer.FromPixelFormat(await Reader.ReadBytesAsync(16, ct).ConfigureAwait(false), w, h, bitsPerPixel, depth);
+			var length = (int) await Reader.ReadUInt32Async(ct).ConfigureAwait(false);
 
-			buffer.DesktopName = GetString(await Reader.ReadBytesAsync(length, ct));
+			buffer.DesktopName = GetString(await Reader.ReadBytesAsync(length, ct).ConfigureAwait(false));
 			
 			return buffer;
 		}
@@ -439,8 +439,8 @@ namespace VncSharp
 			buff[2] = 0x00;
 			buff[3] = 0x00;
 			buffer.ToPixelFormat().CopyTo(buff, 4);		// 16-byte Pixel Format
-			await writer.WriteAsync(buff, ct);
-			await writer.FlushAsync(ct);
+			await writer.WriteAsync(buff, ct).ConfigureAwait(false);
+			await writer.FlushAsync(ct).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -460,8 +460,8 @@ namespace VncSharp
 				BitConverter.GetBytes(t).Reverse().ToArray().CopyTo(buff, 4+x);
 				x+=4;
 			}
-			await writer.WriteAsync(buff);
-			await writer.FlushAsync();
+			await writer.WriteAsync(buff).ConfigureAwait(false);
+			await writer.FlushAsync().ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -481,8 +481,8 @@ namespace VncSharp
 			BitConverter.GetBytes((ushort)y).Reverse().ToArray().CopyTo(buff, 4);
 			BitConverter.GetBytes((ushort)width).Reverse().ToArray().CopyTo(buff, 6);
 			BitConverter.GetBytes((ushort)height).Reverse().ToArray().CopyTo(buff, 8);
-			await writer.WriteAsync(buff, ct);
-			await writer.FlushAsync(ct);
+			await writer.WriteAsync(buff, ct).ConfigureAwait(false);
+			await writer.FlushAsync(ct).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -498,8 +498,8 @@ namespace VncSharp
 			buff[2] = 0x00;
 			buff[3] = 0x00;
 			BitConverter.GetBytes(keysym).Reverse().ToArray().CopyTo(buff, 4);
-			await writer.WriteAsync(buff);
-			await writer.FlushAsync();
+			await writer.WriteAsync(buff).ConfigureAwait(false);
+			await writer.FlushAsync().ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -514,8 +514,8 @@ namespace VncSharp
 			buff[1] = buttonMask;
 			BitConverter.GetBytes((ushort)point.X).Reverse().ToArray().CopyTo(buff, 2);
 			BitConverter.GetBytes((ushort)point.Y).Reverse().ToArray().CopyTo(buff, 4);
-			await writer.WriteAsync(buff);
-			await writer.FlushAsync();
+			await writer.WriteAsync(buff).ConfigureAwait(false);
+			await writer.FlushAsync().ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -531,8 +531,8 @@ namespace VncSharp
 			buff[3] = 0x00;
 			BitConverter.GetBytes((uint)text.Length).Reverse().ToArray().CopyTo(buff, 4);
 			GetBytes(text).CopyTo(buff, 8);
-			await writer.WriteAsync(buff);
-			await writer.FlushAsync();
+			await writer.WriteAsync(buff).ConfigureAwait(false);
+			await writer.FlushAsync().ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -541,7 +541,7 @@ namespace VncSharp
 		/// <returns>Returns the message type as an integer.</returns>
 		public async Task<int> ReadServerMessageType()
 		{
-			var result = (int) await Reader.ReadByteAsync();
+			var result = (int) await Reader.ReadByteAsync().ConfigureAwait(false);
             return result;
         }
 
@@ -551,8 +551,8 @@ namespace VncSharp
 		/// <returns>Returns the number of rectangles that follow.</returns>
 		public async Task<int> ReadFramebufferUpdate()
 		{
-			await ReadPadding(1);
-			var result = (int) await Reader.ReadUInt16Async();
+			await ReadPadding(1).ConfigureAwait(false);
+			var result = (int) await Reader.ReadUInt16Async().ConfigureAwait(false);
             return result;
         }
 
@@ -565,13 +565,13 @@ namespace VncSharp
 		{
 			var rectangle = new Rectangle
 			{
-				X = await Reader.ReadUInt16Async(),
-				Y = await Reader.ReadUInt16Async(),
-				Width = await Reader.ReadUInt16Async(),
-				Height = await Reader.ReadUInt16Async()
+				X = await Reader.ReadUInt16Async().ConfigureAwait(false),
+				Y = await Reader.ReadUInt16Async().ConfigureAwait(false),
+				Width = await Reader.ReadUInt16Async().ConfigureAwait(false),
+				Height = await Reader.ReadUInt16Async().ConfigureAwait(false)
 			};
 
-			var encoding = (int) await Reader.ReadUInt32Async();
+			var encoding = (int) await Reader.ReadUInt32Async().ConfigureAwait(false);
 
             return (rectangle, encoding);
         }
@@ -584,15 +584,15 @@ namespace VncSharp
 		/// </summary>
 		public async Task ReadColourMapEntry()
 		{
-			await ReadPadding(1);
-			var firstColor = await ReadUInt16();
-			var nbColors = await ReadUInt16();
+			await ReadPadding(1).ConfigureAwait(false);
+			var firstColor = await ReadUInt16().ConfigureAwait(false);
+			var nbColors = await ReadUInt16().ConfigureAwait(false);
 
 			for (var i = 0; i < nbColors; i++, firstColor++)
 			{
-				MapEntries[firstColor, 0] = (byte)(await ReadUInt16() * byte.MaxValue / ushort.MaxValue);	// R
-				MapEntries[firstColor, 1] = (byte)(await ReadUInt16() * byte.MaxValue / ushort.MaxValue);	// G
-				MapEntries[firstColor, 2] = (byte)(await ReadUInt16() * byte.MaxValue / ushort.MaxValue);	// B
+				MapEntries[firstColor, 0] = (byte)(await ReadUInt16().ConfigureAwait(false) * byte.MaxValue / ushort.MaxValue);	// R
+				MapEntries[firstColor, 1] = (byte)(await ReadUInt16().ConfigureAwait(false) * byte.MaxValue / ushort.MaxValue);	// G
+				MapEntries[firstColor, 2] = (byte)(await ReadUInt16().ConfigureAwait(false) * byte.MaxValue / ushort.MaxValue);	// B
 			}
 		} 
 
@@ -602,9 +602,9 @@ namespace VncSharp
 		/// <returns>Returns the text in the server's Cut Buffer.</returns>
 		public async Task<string> ReadServerCutText()
 		{
-			await ReadPadding(3);
-			var length = (int) await Reader.ReadUInt32Async();
-			return GetString(await Reader.ReadBytesAsync(length));
+			await ReadPadding(3).ConfigureAwait(false);
+			var length = (int) await Reader.ReadUInt32Async().ConfigureAwait(false);
+			return GetString(await Reader.ReadBytesAsync(length).ConfigureAwait(false));
 		}
 
 		// ---------------------------------------------------------------------------------------
@@ -731,25 +731,25 @@ namespace VncSharp
 			// Since this is being used to communicate with an RFB host, only some of the overrides are provided below.
             public override async Task<ushort> ReadUInt16Async(CancellationToken cancellationToken = default(CancellationToken))
             {
-                await FillBuff(2);
+                await FillBuff(2).ConfigureAwait(false);
 				return (ushort)(buff[1] | (uint)buff[0] << 8);
             }
 
             public override async Task<short> ReadInt16Async(CancellationToken cancellationToken = default(CancellationToken))
             {
-				await FillBuff(2);
+				await FillBuff(2).ConfigureAwait(false);
 				return (short)(buff[1] & 0xFF | buff[0] << 8);
             }
 
             public override async Task<uint> ReadUInt32Async(CancellationToken cancellationToken = default(CancellationToken))
             {
-				await FillBuff(4);
+				await FillBuff(4).ConfigureAwait(false);
 				return (uint)buff[3] & 0xFF | (uint)buff[2] << 8 | (uint)buff[1] << 16 | (uint)buff[0] << 24;
             }
 
             public override async Task<int> ReadInt32Async(CancellationToken cancellationToken = default(CancellationToken))
             {
-				await FillBuff(4);
+				await FillBuff(4).ConfigureAwait(false);
 				return buff[3] | buff[2] << 8 | buff[1] << 16 | buff[0] << 24;
             }
 
@@ -758,7 +758,7 @@ namespace VncSharp
 				var bytesRead = 0;
 
 				do {
-					var n = await BaseStream.ReadAsync(buff, bytesRead, totalBytes - bytesRead);
+					var n = await BaseStream.ReadAsync(buff, bytesRead, totalBytes - bytesRead).ConfigureAwait(false);
 					
 					if (n == 0)
 						throw new IOException("Unable to read next byte(s).");
@@ -851,7 +851,7 @@ namespace VncSharp
 
 				// Get compressed stream length to read
 				var buff = new byte[4];
-				if (await BaseStream.ReadAsync(buff, 0, 4) != 4)
+				if (await BaseStream.ReadAsync(buff, 0, 4).ConfigureAwait(false) != 4)
 					throw new Exception("ZRLE decoder: Invalid compressed stream size");
 
 				// BigEndian to LittleEndian conversion
@@ -889,7 +889,7 @@ namespace VncSharp
 						int bytesRead = 0;
 						try
 						{	
-							bytesRead = await netStream.ReadAsync(receiveBuffer, bytesRead, toRead);
+							bytesRead = await netStream.ReadAsync(receiveBuffer, bytesRead, toRead).ConfigureAwait(false);
 						}
 						catch { }
 						
@@ -897,7 +897,7 @@ namespace VncSharp
 						bytesNeeded -= bytesRead;
 
 						// write the readed bytes to the decompression stream.
-						await zlibDecompressedStream.WriteAsync(receiveBuffer, 0, bytesRead);
+						await zlibDecompressedStream.WriteAsync(receiveBuffer, 0, bytesRead).ConfigureAwait(false);
 					}
 					else
 						// there isn't any data atm. let's give the processor some time.

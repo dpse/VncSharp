@@ -41,7 +41,7 @@ namespace VncSharp.Encodings
 		/// <returns>Returns an Integer value representing the pixel in GDI+ format.</returns>
 		public override async Task<int> ReadPixel()
 		{
-			var idx = await reader.ReadByteAsync();
+			var idx = await reader.ReadByteAsync().ConfigureAwait(false);
 			return ToGdiPlusOrder((byte)rfb.MapEntries[idx, 0], (byte)rfb.MapEntries[idx, 1], (byte)rfb.MapEntries[idx, 2]);
 		}
 	}

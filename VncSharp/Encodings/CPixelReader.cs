@@ -34,7 +34,7 @@ namespace VncSharp.Encodings
 
 		public override async Task<int> ReadPixel()
 		{
-			var b = await reader.ReadBytesAsync(3);
+			var b = await reader.ReadBytesAsync(3).ConfigureAwait(false);
 			return ToGdiPlusOrder(b[2], b[1], b[0]);
 		}
 	}

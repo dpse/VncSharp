@@ -42,8 +42,8 @@ namespace VncSharp.Encodings
 		{
 			// Read the source point from which to begin copying pixels
 			source = new Point();
-			source.X = await rfb.ReadUInt16();
-			source.Y = await rfb.ReadUInt16();
+			source.X = await rfb.ReadUInt16().ConfigureAwait(false);
+			source.Y = await rfb.ReadUInt16().ConfigureAwait(false);
 		}
 
 		public unsafe override void Draw(Bitmap desktop)

@@ -35,7 +35,7 @@ namespace VncSharp.Encodings
 		{
 			// Each pixel from the remote server represents a pixel to be drawn
 			for (var i = 0; i < rectangle.Width * rectangle.Height; ++i) {
-				framebuffer[i] = await preader.ReadPixel();
+				framebuffer[i] = await preader.ReadPixel().ConfigureAwait(false);
 			}
 		}
 	}

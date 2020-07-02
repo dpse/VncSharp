@@ -40,7 +40,7 @@ namespace VncSharp.Encodings
 
 		public override async Task Decode()
 		{
-			await rfb.ZrleReader.DecodeStream();
+			await rfb.ZrleReader.DecodeStream().ConfigureAwait(false);
 
 			for (var ty = 0; ty < rectangle.Height; ty += TILE_HEIGHT) {
 				var th = Math.Min(rectangle.Height - ty, TILE_HEIGHT);
@@ -48,7 +48,7 @@ namespace VncSharp.Encodings
 				for (var tx = 0; tx < rectangle.Width; tx += TILE_WIDTH) {
 					var tw = Math.Min(rectangle.Width - tx, TILE_WIDTH);
 
-					var subencoding = await rfb.ZrleReader.ReadByteAsync();
+					var subencoding = await rfb.ZrleReader.ReadByteAsync().ConfigureAwait(false);
 
 					if (subencoding >= 17 && subencoding <= 127 || subencoding == 129)
 						throw new Exception("Invalid subencoding value");
@@ -58,7 +58,7 @@ namespace VncSharp.Encodings
 
 					// Fill palette
 					for (var i = 0; i < paletteSize; i++)
-						palette[i] = await preader.ReadPixel();
+						palette[i] = await preader.ReadPixel().ConfigureAwait(false);
 
 					if (paletteSize == 1) {
 						// Solid tile
@@ -69,20 +69,20 @@ namespace VncSharp.Encodings
 					if (!isRLE) {
 						if (paletteSize == 0) {
 							// Raw pixel data
-							await FillRectangle(new Rectangle(tx, ty, tw, th));
+							await FillRectangle(new Rectangle(tx, ty, tw, th)).ConfigureAwait(false);
 						} else {
 							// Packed palette
-							await ReadZrlePackedPixels(tw, th, palette, paletteSize, tileBuffer);
+							await ReadZrlePackedPixels(tw, th, palette, paletteSize, tileBuffer).ConfigureAwait(false);
 							FillRectangle(new Rectangle(tx, ty, tw, th), tileBuffer);
 						}
 					} else {
 						if (paletteSize == 0) {
 							// Plain RLE
-							await ReadZrlePlainRLEPixels(tw, th, tileBuffer);
+							await ReadZrlePlainRLEPixels(tw, th, tileBuffer).ConfigureAwait(false);
 							FillRectangle(new Rectangle(tx, ty, tw, th), tileBuffer);
 						} else {
 							// Packed RLE palette
-							await ReadZrlePackedRLEPixels(tx, ty, tw, th, palette, tileBuffer);
+							await ReadZrlePackedRLEPixels(tx, ty, tw, th, palette, tileBuffer).ConfigureAwait(false);
 							FillRectangle(new Rectangle(tx, ty, tw, th), tileBuffer);
 						}
 					}
@@ -103,7 +103,7 @@ namespace VncSharp.Encodings
 
 				while (ptr < eol) {
 					if (nbits == 0)	{
-						b = await rfb.ZrleReader.ReadByteAsync();
+						b = await rfb.ZrleReader.ReadByteAsync().ConfigureAwait(false);
 						nbits = 8;
 					}
 					nbits -= bppp;
@@ -118,11 +118,11 @@ namespace VncSharp.Encodings
 			var ptr = 0;
 			var end = ptr + tw * th;
 			while (ptr < end) {
-				var pix = await preader.ReadPixel();
+				var pix = await preader.ReadPixel().ConfigureAwait(false);
 				var len = 1;
 				int b;
 				do {
-					b = await rfb.ZrleReader.ReadByteAsync();
+					b = await rfb.ZrleReader.ReadByteAsync().ConfigureAwait(false);
 					len += b;
 				} while (b == byte.MaxValue);
 
@@ -135,12 +135,12 @@ namespace VncSharp.Encodings
 			var ptr = 0;
 			var end = ptr + tw * th;
 			while (ptr < end) {
-				int index = await rfb.ZrleReader.ReadByteAsync();
+				int index = await rfb.ZrleReader.ReadByteAsync().ConfigureAwait(false);
 				var len = 1;
 				if ((index & 128) != 0) {
 					int b;
 					do {
-						b = await rfb.ZrleReader.ReadByteAsync();
+						b = await rfb.ZrleReader.ReadByteAsync().ConfigureAwait(false);
 						len += b;
 					} while (b == byte.MaxValue);
 				}

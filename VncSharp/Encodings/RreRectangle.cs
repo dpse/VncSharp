@@ -33,8 +33,8 @@ namespace VncSharp.Encodings
 
 		public override async Task Decode()
 		{
-			var numSubRect = (int) await rfb.ReadUint32();	// Number of sub-rectangles within this rectangle
-			var bgPixelVal = await preader.ReadPixel();		// Background colour
+			var numSubRect = (int) await rfb.ReadUint32().ConfigureAwait(false);	// Number of sub-rectangles within this rectangle
+			var bgPixelVal = await preader.ReadPixel().ConfigureAwait(false);		// Background colour
 			var subRectVal = 0;							// Colour to be used for each sub-rectangle
 			
 			// Dimensions of each sub-rectangle will be read into these
@@ -45,11 +45,11 @@ namespace VncSharp.Encodings
 
 			// Colour in all the subrectangles, reading the properties of each one after another.
 			for (var i = 0; i < numSubRect; i++) {
-				subRectVal	= await preader.ReadPixel();
-				x			= await rfb.ReadUInt16();
-				y			= await rfb.ReadUInt16();
-				w			= await rfb.ReadUInt16();
-				h			= await rfb.ReadUInt16();
+				subRectVal	= await preader.ReadPixel().ConfigureAwait(false);
+				x			= await rfb.ReadUInt16().ConfigureAwait(false);
+				y			= await rfb.ReadUInt16().ConfigureAwait(false);
+				w			= await rfb.ReadUInt16().ConfigureAwait(false);
+				h			= await rfb.ReadUInt16().ConfigureAwait(false);
 				
 				// Colour in this sub-rectangle
 				FillRectangle(new Rectangle(x, y, w, h), subRectVal);

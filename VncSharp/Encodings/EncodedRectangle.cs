@@ -183,7 +183,7 @@ namespace VncSharp.Encodings
 
 			for (var y = 0; y < rect.Height; ++y) {
 				for (var x = 0; x < rect.Width; ++x) {
-					framebuffer[ptr++] = await preader.ReadPixel();	// every pixel needs to be read from server
+					framebuffer[ptr++] = await preader.ReadPixel().ConfigureAwait(false);	// every pixel needs to be read from server
 				}
 				ptr += offset;								    // advance to next row within pixels
 			}

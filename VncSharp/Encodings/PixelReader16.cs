@@ -34,7 +34,7 @@ namespace VncSharp.Encodings
 	
 		public override async Task<int> ReadPixel()
 		{
-			var b = await reader.ReadBytesAsync(2);
+			var b = await reader.ReadBytesAsync(2).ConfigureAwait(false);
 
             var pixel = (ushort)((uint)b[0] & 0xFF | (uint)b[1] << 8);
 
