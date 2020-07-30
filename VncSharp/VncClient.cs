@@ -488,7 +488,7 @@ namespace VncSharp
                                 // see if it is necessary to synchronize this event with the UI thread.
                                 var control = VncUpdate.Target as Control;
                                 if (control != null) {
-                                    control.Invoke(VncUpdate, this, e);
+                                    control.BeginInvoke(VncUpdate, this, e);
                                 } else {
                                     // Target is not a WinForms control, so do it on this thread...
                                     VncUpdate(this, new VncEventArgs(er));
@@ -534,7 +534,7 @@ namespace VncSharp
 		    var target = (Control) ConnectionLost.Target;
 
 		    if (target != null)
-		        target.Invoke(ConnectionLost, this, EventArgs.Empty);
+		        target.BeginInvoke(ConnectionLost, this, EventArgs.Empty);
 		    else
 		        ConnectionLost(this, EventArgs.Empty);
 		}
@@ -547,7 +547,7 @@ namespace VncSharp
             var target = (Control) ServerCutText.Target;
 
             if (target != null)
-                target.Invoke(ServerCutText, this, EventArgs.Empty);
+                target.BeginInvoke(ServerCutText, this, EventArgs.Empty);
             else
                 ServerCutText(this, EventArgs.Empty);
         }
