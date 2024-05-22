@@ -1,6 +1,6 @@
 # VncSharp
 
-This a fork of [VncSharp](https://github.com/humphd/VncSharp) that adds support for asynchronous connection operations. This makes it possible to use the `RemoteDesktop` control without blocking the UI thread. Just await `ConnectAsync` rather than calling `Connect`. It as also possible to connect through a `Stream`, which makes it possibly to easily route traffic through e.g. a proxy server.
+This a fork of [VncSharp](https://github.com/humphd/VncSharp) that adds support for asynchronous connection operations. This makes it possible to use the `RemoteDesktop` control without blocking the UI thread. Just await `ConnectAsync` rather than calling `Connect`. It is also possible to connect through a `Stream`, which makes it possible to easily route traffic through e.g. a proxy server.
 
 The implementation makes use of the `AsyncBinaryReader` and `AsyncBinaryWriter` implementations from [AsyncBinaryReaderWriter](https://github.com/ronnieoverby/AsyncBinaryReaderWriter).
 
